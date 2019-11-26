@@ -1,0 +1,6 @@
+CONTRIBUTIONS:
+
+	Chris Major 						Particle Swarm Optimization
+	Farshina Nazrul-Shimim 
+	Tysen Radovich						Differential Evolution
+	Allen Simpson						Genetic Algorithm

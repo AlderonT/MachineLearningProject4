@@ -148,6 +148,7 @@ module rec Assignment3 =
                 }
             ) |> Seq.toArray
         dataSet,metadata
+
     let setInputLayerForPoint (n:Network) (p:Point) =
         let inputLayer = n.layers.[0]
         for i = inputLayer.nodeCount to inputLayer.nodes.Length-1 do 

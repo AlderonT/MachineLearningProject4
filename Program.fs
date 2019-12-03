@@ -22,6 +22,7 @@
 //open RBFNet
 open Tools
 open Tools.Extensions
+open Util
 //open Gaussian.GaussianFunction
 
 // Declare as a module
@@ -77,7 +78,40 @@ module rec Assignment3 =
                 (Seq.zip this.realAttributes p.realAttributes|> Seq.map (fun (a,b) -> a-b)|> Seq.sumBy (fun d -> d*d))
                 + (Seq.zip this.categoricalAttributes p.categoricalAttributes |> Seq.sumBy (fun (a,b)-> if a=b then 0.f else 1.f))
                 |>sqrt 
-       
+    
+
+    type Pop = {
+        chromosomes             : float32[][]
+        neighbors               : Population
+        velocity                : float32[][]
+        pBest                   : float32[][]
+    }
+        with 
+            member calculateFitness trainingSet = 
+                let MSE =
+                    trainingSet
+                    |> Seq.map ( fun p ->
+                        runNetwork metadata network p 
+                        |> fun (_,_,err) -> err*err
+                    )
+                    |>Seq.average
+                MSE
+            member updateVelocity = 
+                let rnd = System.Random()
+                fun () ->
+                    let omega = 0.2f //tune inertia!
+                    let phi_1 = 0.5f * rnd.NextDouble() //tune the float
+                    let phi_2 = 0.5f * rnd.NextDouble() //tune the float
+                    velocity
+                    |> Array.iteri (fun i c -> c |> Array.mapi (fun j (v:float32) -> (omega * v) + (phi_1*(pBest-chromosomes.[i].[j])) + (phi_2 * (neighbors.gBest()-chromosomes.[i].[j])))) // v(t) = omega * v(t-1) + c_1 * r_1 * (pBest - x(t)) + c_2 * r_2 * (gBest - x(t))  
+
+    type Population = {
+        pops                    : Pop[]
+    }
+        with 
+            abstract member gBest: unit -> float32
+
+
 
 // FUNCTIONS
 //--------------------------------------------------------------------------------------------------------------
@@ -402,36 +436,6 @@ module rec Assignment3 =
                 generate (j+1)                              //increment j and run again
         generate 0                                          //calls the generate function
     
-
-    //Does Not Work Consistently
-    //let RBFNetwork (metadata:DataSetMetadata) network point = 
-        
-    //    let logistic (x:float32) = (1./(1.+System.Math.Exp(float -x) )) |> float32      // Logistic Function
-    //    let outputLayer = network.layers.[network.layers.Length-1]                      // Output layer def
-    //    setInputLayerForPoint network point                                             // Set the input layer to the point
-    //    // Connect all of the points in the network
-    //    let runThroughConnection connection = 
-    //        // Iterate through the layers
-    //        for j = 0 to connection.outputLayer.nodeCount - 1 do
-    //            // Create mutable value to hold summation
-    //            let mutable sum = 0.f
-    //            // Iterate through the input layer rows
-    //            for i = 0 to connection.inputLayer.nodeCount - 1 do 
-    //                // Iterate through the columns
-    //                let k = connection.inputLayer.nodes.Length * j + i 
-    //                // Add to the Gaussian function value
-    //                sum <- gaussianFunction connection.inputLayer.nodes connection.weights 0.25f
-    //            // Store the values in the output layer            
-    //            connection.outputLayer.nodes.[j]<-logistic sum        
-    //    // Return network connection values
-    //    network.connections
-    //    |>Seq.iter runThroughConnection                 // Iterate through the sequence        
-    //    // Run through the output layer nodes
-    //    outputLayer.nodes           
-    //    |> Seq.mapi (fun i v -> v,i)                    // Map each node by index
-    //    |> Seq.max                                      // Grab the maximum
-    //    |> fun (v,i) -> v, metadata.getClassByIndex i   // Return as the classification/regression value
-
 
 // IMPLEMENTATIONS
 //--------------------------------------------------------------------------------------------------------------

@@ -75,7 +75,10 @@ module Functions =
         else 
             a.GetLength(0), a.GetLength(1)                                                                  // Otherwise, return lengths
     
-    ////CROSSOVER
+
+    // CROSSOVER FUNCTIONS
+    //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
+
     // Function to perform uniform crossover of chromosomes a and b
     let uniformCrossover (a:Chromosome) (b:Chromosome) =
         let height, width = validateChromosomeSize a b                                                      // Take the height and width of the chromosomes
@@ -90,14 +93,19 @@ module Functions =
                     r1.[j,i] <- b.[j,i]
                     r2.[j,i] <- a.[j,i]
         r1, r2                                                                                              // Return r1 and r2
+
+    // Function to perform uniform crossover between genomes a and b
     let uniformCrossoverGenome (a:Genome) (b:Genome) =
-        a
-        |> Seq.zip b
-        |> Seq.map (fun (a,b) -> uniformCrossover a b)
-        |> Seq.toArray
-        |> Array.unzip
+        a                                                                                                   // Grab genome a
+        |> Seq.zip b                                                                                        // Zip a and b into tuples
+        |> Seq.map (fun (a,b) -> uniformCrossover a b)                                                      // Map a and b and perform uniform crossover
+        |> Seq.toArray                                                                                      // Convert to array
+        |> Array.unzip                                                                                      // Unzip into two new genomes
     
-    ////MUTATION
+
+    // MUTATION FUNCTIONS
+    //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
+
     // Function to mutate a chromosome
     let mutation mutationRate (mean:float32[,]) (stdDev:float32[,]) chromosome =
         let height, width = getHeightWidth chromosome                                                                       // Grab the height and width of a chromosome
@@ -106,9 +114,10 @@ module Functions =
                 if rand.NextDouble() <= mutationRate then                                                                   // If our random value falls below the mutation rate ...
                     chromosome.[j,i]<- chromosome.[j,i] + (nextFloat32() * (randNorm mean.[j,i] stdDev.[j,i]))              // ... mutate with a random value
 
+    // Function to mutate a genome
     let genomeMutation mutationRate (mean:float32[,][]) (stdDev:float32[,][]) genome =
-        genome
-        |> Seq.iteri (fun i c -> mutation mutationRate mean.[i] stdDev.[i] c)
+        genome                                                                                                              // Take a genome                
+        |> Seq.iteri (fun i c -> mutation mutationRate mean.[i] stdDev.[i] c)                                               // Iterate through each chromosome and mutate
     
 
     // NEURAL NETWORK FUNCTIONS
@@ -117,36 +126,37 @@ module Functions =
     // Function to compute the dot product of matrix A and vector r
     // effectively r.[j] = SUM (i = 0 to height; x.[i]*A.[j,i]
     let dotProduct (x:float32[]) (A:float32[,]) (r:float32[]) =
-        let height,width = getHeightWidth A                         // Get the height and width of A
-        if width > x.Length || height > r.Length then               // Confirm that our x array and r arrays are compatible with A
-            failwithf "matrix is not the right size for x and r!"   // If not, kindly let us know
+        let height,width = getHeightWidth A                                                             // Get the height and width of A
+        if width > x.Length || height > r.Length then                                                   // Confirm that our x array and r arrays are compatible with A
+            failwithf "matrix is not the right size for x and r!"                                       // If not, kindly let us know
         
-        for j = 0 to height-1 do                                    //then iterate over the rows (y axis)
-            let mutable sum = 0.f                                   //initiate a mutable sum
-            for i = 0 to width-1 do                                 //then iterate over the columns (x axis)
-                sum <- x.[i] * A.[j,i] + sum                        // increment sum by x.[i]*A.[j,i]
-            r.[j] <- sum                                            //write into then jth element of r the sum
+        for j = 0 to height-1 do                                                                        // Iterate over the rows (y axis)
+            let mutable sum = 0.f                                                                       // Initiate a mutable sum
+            for i = 0 to width-1 do                                                                     // Iterate over the columns (x axis)
+                sum <- x.[i] * A.[j,i] + sum                                                            // Increment sum by x.[i]*A.[j,i]
+            r.[j] <- sum                                                                                // Write into then jth element of r the sum
         
+    // Logistic Function
     let logistic (x:float32 []) (r:float32[]) = 
-        let inline logistic (x:float32) = (1./(1.+System.Math.Exp(float -x) ))|>float32     // we are using the logistic function 1/(1+e^-x)
-        for i = 0 to x.Length-1 do                                                          //iterate through x 
-            r.[i]<- logistic x.[i]                                                          //and write into the ith element of r the logistic function applied to ith element of x 
+        let inline logistic (x:float32) = (1./(1.+System.Math.Exp(float -x) ))|>float32                 // We are using the logistic function 1/(1+e^-x)
+        for i = 0 to x.Length-1 do                                                                      // Iterate through x 
+            r.[i]<- logistic x.[i]                                                                      // And write into the ith element of r the logistic function applied to ith element of x 
 
-
+    // Function to run the feedforward network
     let runFeedForward (genome:Genome) (inputs:float32[]) =
-        let _,width = getHeightWidth genome.[0]                                                 //get the width of the genome's first chromosome
-        if width <> inputs.Length then                                                          //confirm that the width is compatable with the input array
-            failwithf "matrix is not the right size for x and r!"                               //if not let me know...
-        let maxLen = genome|>Seq.map(fun c -> max (c.GetLength(0)) (c.GetLength(1)))|>Seq.max   //get the maximum length of any layer within the genome
-        let b1,b2 = Array.zeroCreate maxLen , Array.zeroCreate maxLen                           //create 2 buffer arrays of maxlen size to store the results of feeding forward
-        genome                                                                                  //Now the MAGIC:
-        |> Seq.fold (fun (inputBuffer,useb1) c ->                                               //fold over the elements of genome (chromosomes) and track the state (a tuple of in input buffer and a boolean telling us to use b1 or b2)
-            let output = if useb1 then b1 else b2                                               //set our output to b1 if we have a true bool, or b2 if a false one.
-            dotProduct inputBuffer c output                                                     //then we apply the dot product function (see above) on inputbuffer and our chromosome, writing into output
-            logistic output output                                                              //then we apply the logistic function (also see above) on our output writing back into output
-            output,(not useb1)                                                                  //then push the output ahead and the negation of the last "useb1" value.
-        ) (inputs,true)                                                                         //our initial stlate will be using the inputs array and true so we write into b1 as our first output
-        |>fst                                                                                   //then we strip off the booleans giving us just the output layer
+        let _,width = getHeightWidth genome.[0]                                                         // Get the width of the genome's first chromosome
+        if width <> inputs.Length then                                                                  // Confirm that the width is compatable with the input array
+            failwithf "matrix is not the right size for x and r!"                                       // If not let me know...
+        let maxLen = genome|>Seq.map(fun c -> max (c.GetLength(0)) (c.GetLength(1)))|>Seq.max           // Get the maximum length of any layer within the genome
+        let b1,b2 = Array.zeroCreate maxLen , Array.zeroCreate maxLen                                   // Create 2 buffer arrays of maxlen size to store the results of feeding forward
+        genome                                                                                          // Now the MAGIC:
+        |> Seq.fold (fun (inputBuffer,useb1) c ->                                                       // Fold over the elements of genome (chromosomes) and track the state (a tuple of in input buffer and a boolean telling us to use b1 or b2)
+            let output = if useb1 then b1 else b2                                                       // Set our output to b1 if we have a true bool, or b2 if a false one.
+            dotProduct inputBuffer c output                                                             // Then we apply the dot product function (see above) on inputbuffer and our chromosome, writing into output
+            logistic output output                                                                      // Then we apply the logistic function (also see above) on our output writing back into output
+            output,(not useb1)                                                                          // Then push the output ahead and the negation of the last "useb1" value.
+        ) (inputs,true)                                                                                 // Our initial stlate will be using the inputs array and true so we write into b1 as our first output
+        |>fst                                                                                           // Then we strip off the booleans giving us just the output layer
 
 
     // LOSS FUNCTIONS
@@ -154,37 +164,40 @@ module Functions =
 
     // Cross Entropy Loss
     let crossEntropyLoss (predicted:float32[]) (expected:float32[]) =
-       Seq.zip predicted expected                                                                   // Zip the arrays of predicted and expected values into tuples
-       |> Seq.map (fun (predicted,expected) ->                                                      // Map through each tuple            
-           let predicted = float predicted                                                          // Represent the predicted value as a float
-           let expected = float expected                                                            // Represent the expected value as a float
-           let log = System.Math.Log2                                                               // Use a base-2 logarithm
-           -(expected * (log predicted) + (1.- expected) * (log (1. - predicted)))                  // Calculate the loss between the predicted/expected values    
-           |> float32                                                                               // Set as float        
-       ) |> Seq.sum                                                                                 // Sum each loss and return
+       Seq.zip predicted expected                                                                       // Zip the arrays of predicted and expected values into tuples
+       |> Seq.map (fun (predicted,expected) ->                                                          // Map through each tuple            
+           let predicted = float predicted                                                              // Represent the predicted value as a float
+           let expected = float expected                                                                // Represent the expected value as a float
+           let log = System.Math.Log2                                                                   // Use a base-2 logarithm
+           -(expected * (log predicted) + (1.- expected) * (log (1. - predicted)))                      // Calculate the loss between the predicted/expected values    
+           |> float32                                                                                   // Set as float        
+       ) |> Seq.sum                                                                                     // Sum each loss and return
  
     // Mean Square Error Loss
     let MSELoss (predicted:float32[]) (expected:float32[])=
-        let mutable errSum = 0.f                                                                    // Initialize mutable sum value
-        for i = 0 to predicted.Length-1 do                                                          // Iterate through predicted values
-            errSum <- let d = predicted.[i] - expected.[i] in d*d+errSum                            // Square the difference between the output and expected node and sum it
-        errSum/(float32 predicted.Length)                                                           // Divide by 2 to make the derivitave easier
+        let mutable errSum = 0.f                                                                        // Initialize mutable sum value
+        for i = 0 to predicted.Length-1 do                                                              // Iterate through predicted values
+            errSum <- let d = predicted.[i] - expected.[i] in d*d+errSum                                // Square the difference between the output and expected node and sum it
+        errSum/(float32 predicted.Length)                                                               // Divide by 2 to make the derivitave easier
 
     // Function to calculate the error based on a given loss function
     let calculateError lossFunction predicted expected : float32 =
-        lossFunction predicted expected                                                             // Return the loss of the predicted/expected pair
+        lossFunction predicted expected                                                                 // Return the loss of the predicted/expected pair
 
 
     // POPULATION ALGORITHM FUNCTIONS
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
 
-    // Functions to initialize chromosomes
+    // Functions to initialize chromosomes - constant or random
     let initChromosome h w = Array2D.init h w (fun _ _ -> 1.f)
     let initRandChromosome rand h w = Array2D.init h w (fun _ _ -> rand())
 
     // Functions to initialize genomes
-    let initGenome sizes = sizes |> Seq.pairwise |> Seq.map (fun (i,o) -> initChromosome o i) |> Seq.toArray
-    let initRandGenome rand sizes = sizes |> Seq.pairwise |> Seq.map (fun (i,o) -> initRandChromosome rand o i) |> Seq.toArray
+    let initGenome sizes = 
+        sizes |> Seq.pairwise |> Seq.map (fun (i,o) -> initChromosome o i) |> Seq.toArray               // Initialize a genome with constant chromosomes
+    
+    let initRandGenome rand sizes = 
+        sizes |> Seq.pairwise |> Seq.map (fun (i,o) -> initRandChromosome rand o i) |> Seq.toArray      // Initialize a genome with random chromosomes
 
     // Function to get the mean and standard deviation of a genome
     let getGenomeMeanAndStdDev (pop:seq<Genome>) =
@@ -215,67 +228,69 @@ module Functions =
                     for i = 0 to w-1 do                                                                 // Iterate through array width
                         sum.[j,i] <- sum.[j,i]/cnt                                                      // override the j_ith value of sum with the j_ith value/ the count (calculated earlier)
             )
-            sum
+            sum                                                                                         //return sum (which is actually an array of 2D Arrays of means... (or a Genome of means (the most average dude)))
 
-        let stdDev =
-            let cnt = float32 cnt
-            let buf : float32[,][] =
-                Array.init mean.Length (fun i ->
-                                            let h,w = mean.[i].GetLength(0), mean.[i].GetLength(1)
-                                            Array2D.zeroCreate h w)
-            // compute variance
-            pop
+        let stdDev =                                                                                    // Calculate the standard deviation by ...
+            let cnt = float32 cnt                                                                       // Create a count value
+            let buf : float32[,][] =                                                                    // Create a 2D array of float values
+                Array.init mean.Length (fun i ->                                                        // Initialize an array of values
+                                            let h,w = mean.[i].GetLength(0), mean.[i].GetLength(1)      // Grab the means
+                                            Array2D.zeroCreate h w)                                     // Create an array off of it
+
+            pop                                                                                         // Compute variance            
             |> Seq.iter (fun genome ->
-                genome
-                |> Seq.iteri (fun i chromosome ->
-                    let h,w = chromosome.GetLength(0), chromosome.GetLength(1)
-                    let buf_i = buf.[i]
-                    let mean_i = mean.[i]
-                    for j = 0 to h-1 do
-                        for i = 0 to w-1 do
-                            let x = chromosome.[j,i]
-                            let mean = mean_i.[j,i]
-                            let x_mean = x-mean
-                            buf_i.[j,i] <- x_mean*x_mean + buf_i.[j,i]
+                genome                                                                                  // Grab the genome
+                |> Seq.iteri (fun i chromosome ->                                                       // Iterate through each chromosome    
+                    let h,w = chromosome.GetLength(0), chromosome.GetLength(1)                          // Grab the height and width
+                    let buf_i = buf.[i]                                                                 // Get the index value of the 2D array
+                    let mean_i = mean.[i]                                                               // Grab the average at that index
+                    for j = 0 to h-1 do                                                                 // Iterate through array height  
+                        for i = 0 to w-1 do                                                             // Iterate through array width
+                            let x = chromosome.[j,i]                                                    // Grab the chromosome
+                            let mean = mean_i.[j,i]                                                     // Grab the mean
+                            let x_mean = x-mean                                                         // Recalculate the mean
+                            buf_i.[j,i] <- x_mean*x_mean + buf_i.[j,i]                                  // Add into the 2D array
                 )
             )
-            // compute stddev
-            buf
+            
+            buf                                                                                         // Compute stddev
             |> Seq.iter (fun buf ->
                 let h,w = buf.GetLength(0), buf.GetLength(1)
-                for j = 0 to h-1 do
-                    for i = 0 to w-1 do
-                        buf.[j,i] <- sqrt (buf.[j,i]/cnt)
+                for j = 0 to h-1 do                                                                     // Iterate through array height  
+                    for i = 0 to w-1 do                                                                 // Iterate through array width
+                        buf.[j,i] <- sqrt (buf.[j,i]/cnt)                                               // Calculate the standard deviation
             )
-            buf
-        mean,stdDev
+            buf                                                                                         // Return the 2D array
+
+        mean, stdDev                                                                                    // Return the mean and standard deviation 
+
 
     // RUNTIME FUNCTIONS
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
 
-    let runTrainingSet lossFunction (g:Genome) (trainingSet:float32[][]) (expectedResults:float32[][])=
-        trainingSet
-        |>Seq.zip expectedResults
-        |>Seq.averageBy (fun (er,ts) -> 
-            let pred = runFeedForward g ts  
-            calculateError lossFunction pred er
+    // Function to run the training set of the data
+    let runTrainingSet lossFunction (g:Genome) (trainingSet:float32[][]) (expectedResults:float32[][]) =
+        trainingSet                                                                                             // Grab the training set                        
+        |>Seq.zip expectedResults                                                                               // Zip with the expected results into tuples
+        |>Seq.averageBy (fun (er,ts) ->                                                                         // Average the tiple values
+            let pred = runFeedForward g ts                                                                      // Run the feedforward neural network        
+            calculateError lossFunction pred er                                                                 // Calculate the error of the results    
         )
 
-
-
+    // Function to run a generation
     let runGeneration (options:RunGenerationOptions) (initialPopulation:Population) (trainingSet:float32[][]) (expectedResults:float32[][])  =
-        let rec loop (lastMinErr:float32) currentPopulation =
-            let popsWithErrors =
-                currentPopulation
-                |>Array.map (fun g -> g,runTrainingSet options.lossFn g trainingSet expectedResults)
-                |>(if  options.sortByError then Array.sortBy snd else id)
-            let minErr = popsWithErrors |> Seq.map snd |> Seq.min
-            let errDelta = abs(lastMinErr-minErr)
-            let avgErr = popsWithErrors |> Array.averageBy snd
-            let bestErr = popsWithErrors |> Seq.map snd |> Seq.min
-            let worstErr = popsWithErrors |> Seq.map snd |> Seq.max
-            if errDelta > options.converganceDeltaError then 
-                match options.nextGenFn popsWithErrors with 
+        let rec loop (lastMinErr:float32) currentPopulation =                                                   // Loop through the current population
+            let popsWithErrors =                                                                                // Grab the population members with errors
+                currentPopulation                                                                               // For the current population ...
+                |>Array.map (fun g -> g,runTrainingSet options.lossFn g trainingSet expectedResults)            // ... map out the training set
+                |>(if  options.sortByError then Array.sortBy snd else id)                                       // Sort based on error
+            let minErr = popsWithErrors |> Seq.map snd |> Seq.min                                               // Grab the smallest error
+            let errDelta = abs(lastMinErr-minErr)                                                               // Calculate the delta value
+            let avgErr = popsWithErrors |> Array.averageBy snd                                                  // Calculate the average error
+            let bestErr = popsWithErrors |> Seq.map snd |> Seq.min                                              // Calculate the best error
+            let worstErr = popsWithErrors |> Seq.map snd |> Seq.max                                             // Calculate the worst error
+            if errDelta > options.converganceDeltaError then                                                    // If the error delta is greater than the convergence delta ...
+                match options.nextGenFn popsWithErrors with                                                     // Print error messages
                 | None ->
                     printfn "Next Gen Function Stopped.\naverage error: %f best error: %f worst error: %f" avgErr bestErr worstErr
                     popsWithErrors |> Seq.minBy snd |> fst
@@ -287,44 +302,33 @@ module Functions =
                 popsWithErrors |> Seq.minBy snd |> fst 
         loop System.Single.MaxValue initialPopulation
 
+    // Function to run a Genetic Algorithm (GA) on the next generation
     let simpleGANextGen mutationRate (popErrs:(Genome*float32)[]) =
-        let maxidx = popErrs.Length/2
-        let mean,stdDev = popErrs |> Seq.map fst |> getGenomeMeanAndStdDev
-        let p = Array.zeroCreate popErrs.Length
-        let mutable p_i = 0
-        while p_i < p.Length do
-            let a,_ = popErrs.[rand.Next(maxidx+1)]
-            let b,_ = popErrs.[rand.Next(maxidx+1)]
+        let maxidx = popErrs.Length/2                                                                           // Grab the max ID index
+        let mean,stdDev = popErrs |> Seq.map fst |> getGenomeMeanAndStdDev                                      // Get the mean and standard deviation
+        let p = Array.zeroCreate popErrs.Length                                                                 // Create an array to represent the current population
+        let mutable p_i = 0                                                                                     // Create an array to represent the next population
+        while p_i < p.Length do                                                                                 
+            let a,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
+            let b,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
             
-            let c_1,c_2 =
-                uniformCrossoverGenome a b
-            genomeMutation mutationRate mean stdDev c_1
-            genomeMutation mutationRate mean stdDev c_2
+            let c_1,c_2 =                                                                                       // Create two children
+                uniformCrossoverGenome a b                                                                      // Perform crossover
+            genomeMutation mutationRate mean stdDev c_1                                                         // Mutate child 1
+            genomeMutation mutationRate mean stdDev c_2                                                         // Mutate child 2
 
-            p.[p_i] <- c_1
+            p.[p_i] <- c_1                                                                                      // Update the population ...
             p_i <- p_i+1
             if p_i < p.Length then
-                p.[p_i] <- c_1
-                p_i <- p_i+1
-        Some p
+                p.[p_i] <- c_1                                                                                  // ... with the child
+                p_i <- p_i+1                                                                                    // ... with the previous member
+        Some p                                                                                                      
             
+    // Function to initialize a population
     let initializePopulatation (genomeDescriptor:seq<int>) size =
-        Array.init size (fun _ ->
-            initRandGenome randUniform_m1_1 genomeDescriptor
+        Array.init size (fun _ ->                                                                               // Initialize an array ...
+            initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
         )
-
-    // POPULATION MEMBER FUNCTIONS
-    //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
-
-    //// Function to calculate the velocity of a population member
-    //let calculateVelocity = 
-    //    let rnd = System.Random()
-    //    fun (x:Pop) ->
-    //        let omega = 0.2f //tune inertia!
-    //        let phi_1 = 0.5f * (rnd.NextDouble()|>float32) //tune the float
-    //        let phi_2 = 0.5f * (rnd.NextDouble()|>float32) //tune the float
-    //        x.velocity
-    //        |> Array.mapi (fun i c -> c |> Array.mapi (fun j (v:float32) -> (omega * v) + (phi_1*(x.pBest.[i].[j]-x.chromosomes.[i].[j])) + (phi_2 * (x.neighbors.gBest()-x.chromosomes.[i].[j])))) // v(t) = omega * v(t-1) + c_1 * r_1 * (pBest - x(t)) + c_2 * r_2 * (gBest - x(t))  
 
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 

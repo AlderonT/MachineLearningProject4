@@ -11,28 +11,19 @@
 // MODULES
 //--------------------------------------------------------------------------------------------------------------
 namespace Project4 
-// Load the file names from the same folder
-//#load "FeedforwardNet.fsx"
-//#load "RBFNet.fsx"
-//#load "tools.fsx"
     
 // Open the modules
-//open FeedforwardNet
-
 open Extensions
 open Util
 open Types
-//open Gaussian.GaussianFunction
 
 // Declare as a module
 module rec Assignment3 = 
 
-
-
-// FUNCTIONS
-//--------------------------------------------------------------------------------------------------------------
+    // FUNCTIONS
+    //--------------------------------------------------------------------------------------------------------------
        
-    //// How to get a dataset from a file
+    // How to get a dataset from a file
     let fetchTrainingSet filePath isCommaSeperated hasHeader =
         System.IO.File.ReadAllLines(filePath)                           // this give you back a set of line from the file (replace with your directory)
         |> Seq.map (fun v -> v.Trim())                                  // trim the sequence

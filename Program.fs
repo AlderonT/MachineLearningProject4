@@ -360,55 +360,69 @@ module rec Assignment3 =
            
 //
 open Assignment3
-
-[<EntryPoint>]
-let main argv =
-    let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-    let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
-    let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
-    let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
-    let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
-    let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
-    let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
-    let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
-    //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+module Main =
+    [<EntryPoint>]
+    let main argv =
+        let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+        let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
+        let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
+        let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
+        let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
+        let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
+        let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
+        let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
+        //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
     
-    datasets
-    |>Seq.map (fun (ds,metadata)->
-        let network = createNetwork metadata [|10;10|]   //Change this to contain an integer for the number of nodes per layer [|layer1;layer2;layer3|]
-        initializeNetwork network 
-        let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
+        datasets
+        |>Seq.map (fun (ds,metadata)->
+            let genomeSizes = seq {
+                yield metadata.inputNodeCount
+                yield 10
+                yield 10
+                yield metadata.outputNodeCount
+            }
+            let options = {
+                
+                sortByError = true
+                lossFn = if metadata.isClassification then Functions.crossEntropyLoss else Functions.MSELoss
+                nextGenFn = Functions.simpleGANextGen 0.1f
+                converganceDeltaError = 0.001f
+            }
+            ()
+            //let network = createNetwork metadata [|10;10|]   //Change this to contain an integer for the number of nodes per layer [|layer1;layer2;layer3|]
+            //initializeNetwork network 
+            //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
+            ////let trainingSet=trainingSet.[0..0]
+            //trainNetworkToErr 0.01f 2.0f metadata network trainingSet
+            //let MSE =
+            //    testSet
+            //    |> Seq.map ( fun p ->
+            //        runNetwork metadata network p 
+            //        |> fun (_,_,err) -> err*err
+            //    )
+            //    |>Seq.average
+            //MSE
+        )
+        |> Seq.toArray
+        |> Array.iter (fun x-> printfn "MSE: %f" x)
+        0
+        //let ds,metadata = dsmd3
+        //let network = createNetwork metadata [|10;10|]
+        //initializeNetwork network 
+        //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
         //let trainingSet=trainingSet.[0..0]
-        trainNetworkToErr 0.01f 2.0f metadata network trainingSet
-        let MSE =
-            testSet
-            |> Seq.map ( fun p ->
-                runNetwork metadata network p 
-                |> fun (_,_,err) -> err*err
-            )
-            |>Seq.average
-        MSE
-    )
-    |> Seq.toArray
-    |> Array.iter (fun x-> printfn "MSE: %f" x)
-    0
-    //let ds,metadata = dsmd3
-    //let network = createNetwork metadata [|10;10|]
-    //initializeNetwork network 
-    //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
-    //let trainingSet=trainingSet.[0..0]
-    //trainNetworkToErr 0.01f 2.f metadata network trainingSet
-    //let MSE =
-    //    testSet
-    //    |> Seq.map ( fun p ->
-    //        runNetwork metadata network p 
-    //        |> fun (_,_,err) -> err*err
-    //    )
-    //    |>Seq.average
-    //printfn "MSE: %f" MSE
-    //0
+        //trainNetworkToErr 0.01f 2.f metadata network trainingSet
+        //let MSE =
+        //    testSet
+        //    |> Seq.map ( fun p ->
+        //        runNetwork metadata network p 
+        //        |> fun (_,_,err) -> err*err
+        //    )
+        //    |>Seq.average
+        //printfn "MSE: %f" MSE
+        //0
 
-    //Networks: 10x10x10, 5x5x10, and 8x4x7
+        //Networks: 10x10x10, 5x5x10, and 8x4x7
     
-//--------------------------------------------------------------------------------------------------------------
-// END OF CODE
+    //--------------------------------------------------------------------------------------------------------------
+    // END OF CODE

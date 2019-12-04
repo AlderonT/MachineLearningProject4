@@ -52,38 +52,4 @@ module rec Types =
                 |>sqrt 
     
 
-    type Pop = {
-        chromosomes             : float32[][]
-        neighbors               : Population
-        velocity                : float32[][]
-        pBest                   : float32[][]
-        pBestFitness            : float32
-        metadata                : DataSetMetadata
-    }
-        with 
-            member x.calculateFitness trainingSet = 
-                let network = createNetworkFromPop x.metadata x.chromosomes
-                let MSE =
-                    trainingSet
-                    |> Seq.map ( fun p ->
-                        runNetwork metadata network p 
-                        |> fun (_,_,err) -> err
-                    )
-                    |>Seq.average
-                -MSE
-            member x.updateVelocity = 
-                let rnd = System.Random()
-                fun () ->
-                    let omega = 0.2f //tune inertia!
-                    let phi_1 = 0.5f * (rnd.NextDouble()|>float32) //tune the float
-                    let phi_2 = 0.5f * (rnd.NextDouble()|>float32) //tune the float
-                    x.velocity
-                    |> Array.mapi (fun i c -> c |> Array.mapi (fun j (v:float32) -> (omega * v) + (phi_1*(x.pBest.[i].[j]-x.chromosomes.[i].[j])) + (phi_2 * (x.neighbors.gBest()-x.chromosomes.[i].[j])))) // v(t) = omega * v(t-1) + c_1 * r_1 * (pBest - x(t)) + c_2 * r_2 * (gBest - x(t))  
-
-    type Population = {
-        pops                    : Pop[]
-    }
-        with 
-            member p.gBest =  p.pops |> Array.maxBy (fun x -> x.pBestFitness)
-
     

@@ -24,12 +24,15 @@ module Functions =
     type Gene = float32                     // Type alias genes represet float32
     type Chromosome = Gene[,]               // Type alias Chromosomes represet 2D arrays of float32
     type Genome = Chromosome []             // Type alias Genomes represet Arrays of Chromosomes
-    type Agent = {
+    
+    type Agent = {                          // Type for an array of individuals
         position                                : Genome                            // Current position
         pBest                                   : Genome                            // Personal best
         velocity                                : Genome                            // Current velocity
-        neighbors                               : Agent[]                          // Population of neighbors
+        neighbors                               : Agent[]                           // Population of neighbors
+        bestError                               : float32                           // Best error seen by Agent
     }
+    
     type Population = Agent []             // Type alias Genomes represet Arrays of individuals (Genomes)
 
     // RunGenerationOptions serves as metadata for a population
@@ -271,6 +274,22 @@ module Functions =
         mean, stdDev                                                                                    // Return the mean and standard deviation 
 
 
+    // PARTICLE SWARM OPTIMIZATION FUNCTIONS
+    //--------------------------------------------------------------------------------------------------------------
+
+    // Function to update the position of a member
+    let updateAgentPosition agent =
+        agent.position = agent.position + agent.velocity                            // Update position
+
+    // Function to update the position of a member
+    let updateAgentVelocity agent (omega : float) (c1 : float) (c2 : float) (gBest : float) =
+
+        let r1 = rand.NextDouble()                                                  // Generate random value r1
+        let r2 = rand.NextDouble()                                                  // Generate random value r2
+
+        agent.velocity = (omega * agent.velocity) + (c1 * r1 * (agent.pBest - agent.position)) + (c2 * r2 * (gBest - agent.position))         // Update velocity
+
+
     // RUNTIME FUNCTIONS
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
 
@@ -328,8 +347,24 @@ module Functions =
             if p_i < p.Length then
                 p.[p_i] <- c_1                                                                                  // ... with the child
                 p_i <- p_i+1                                                                                    // ... with the previous member
-        Some p                                                                                                      
+        Some p  
+       
+       
+    // Function for performing PSO
+    let simplePSO (popErrs:(Agent*float32)[]) = 
+        let omega = 1                                                                                           // Assign omega
+        let c1 = 1                                                                                              // [PSO] Assign c1
+        let c2 = 1                                                                                              // [PSO] Assign c2
+        let gBest = popErrs |> Seq.map fst |> Seq.head |> fun x -> x.pBest                                      // Get gBest from all possible pBests                                         // Update gBest            
+        popErrs                                                                                                 // Perform PSO
+        |> Seq.map (fun (a, e) ->                                                                               // Map through the population's errors
+            a.pBest = if a.bestError > e then a.position else a.pBest                                           // [PSO] Update pBest                
+            updateAgentPosition a                                                                               // [PSO] Update position
+            updateAgentVelocity a omega c1 c2 gBest                                                             // [PSO] Update velocity
+            a                                                                                                   // Return a
+        )
             
+
     // Function to initialize a population
     let initializePopulatation (genomeDescriptor:seq<int>) size =
         Array.init size (fun _ ->                                                                               // Initialize an array ...

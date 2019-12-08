@@ -118,7 +118,7 @@ module Functions =
     let genomeMutation mutationRate (mean:float32[,][]) (stdDev:float32[,][]) genome =
         genome                                                                                                              // Take a genome                
         |> Seq.iteri (fun i c -> mutation mutationRate mean.[i] stdDev.[i] c)                                               // Iterate through each chromosome and mutate
-    
+
 
     // NEURAL NETWORK FUNCTIONS
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     

@@ -20,12 +20,14 @@ module rec Types =
         nodeCount                               : int                               // Number of nodes in the layer
         deltas                                  : float32[]                         // sacrificing space for speed
     }
+
     // Create a ConnectionMatrix object to represent the connection matrix within the neural network
     type ConnectionMatrix = {
         weights                                 : float32[]                         // Sequence of weights within the matrix
         inputLayer                              : Layer                             // Input layer
         outputLayer                             : Layer                             // Output layer
     }
+
     // Create a Network object to represent a neural network
     type Network = {
         layers                                  : Layer[]                           // Array of layers within the network

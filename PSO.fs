@@ -19,50 +19,40 @@ open Tools.Extensions
 module rec ParticleSwarmOptimization = 
 
 
-// OBJECTS
-//--------------------------------------------------------------------------------------------------------------
+    // OBJECTS
+    //--------------------------------------------------------------------------------------------------------------
         
-    // (none)
+    // Create a Population Member object to represent a member of the swarm(s)
+    type Member = {
+        id                                      : int                               // ID value of the member
+        neighbors                               : int[]                             // Array of neighbor IDs
+        position                                : float32                           // Current position
+        velocity                                : float32                           // Current velocity
+        pBest                                   : float32                           // Personal best
+    }
        
 
-// FUNCTIONS
-//--------------------------------------------------------------------------------------------------------------
+    // FUNCTIONS
+    //--------------------------------------------------------------------------------------------------------------
        
-    // Function to run Particle Swarm Optimization given a population
-    let particleSwarmOpt (net : Network) =
-        
-        // Initialize the population as the layer ConnectionMatrix of the network
-        let population = net.layers
+    // Function to update the position of a member
+    let updateMemberPosition mem =
+        mem.position = mem.position + mem.velocity                                  // Update position
 
-        population
-        |> Array.toSeq                                  // Convert the array to a sequence
-        |> Seq.map (fun p ->                            // Set the best values
-            {
-                
-                // Set the personal best
-            
-                // Set the regional (local) best
-        
-            })
-        |> Seq.map (fun p ->                            // Update velocity and position
-            {
+    // Function to update the position of a member
+    let updateMemberVelocity mem (omega : float) (c1 : float) (c2 : float) (gBest : float) =
 
-                // Generate random r1 and r2
+        let r1 = rand.NextDouble()                                                  // Generate random value r1
+        let r2 = rand.NextDouble()                                                  // Generate random value r2
 
-            
-                // Set the velocity
-                // v[i][j][t + 1] = v[i][j][t] + (c1 * r1 * (pb[i][j][t] - x[i][j][t])) + (c2 * r2 * (lb[i][j][t] - x[i][j][t]))
+        mem.velocity = (omega * mem.velocity) + (c1 * r1 * (mem.pBest - mem.position)) + (c2 * r2 * (gBest - mem.position))         // Update velocity
 
 
-                // Set the position
-                // x[i][j][t+1] = x[i][j][t] + v[i][j][t+1];
-        
-            })
-
-// IMPLEMENTATIONS
-//--------------------------------------------------------------------------------------------------------------
+    // IMPLEMENTATIONS
+    //--------------------------------------------------------------------------------------------------------------
            
-    let var1 = particleSwarmOpt
+        // (none)
     
+
 //--------------------------------------------------------------------------------------------------------------
 // END OF CODE

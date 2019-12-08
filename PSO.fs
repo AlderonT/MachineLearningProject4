@@ -34,11 +34,11 @@ module rec ParticleSwarmOptimization =
     //}
 
     // Create a Population Member object to represent a member of the swarm(s)
-    type Member = {
+    type Agent = {
         position                                : Genome                            // Current position
         pBest                                   : Genome                            // Personal best
         velocity                                : Genome                            // Current velocity
-        neighbors                               : Member[]                             // Population of neighbors
+        neighbors                               : Member[]                          // Population of neighbors
     }
        
 
@@ -46,16 +46,16 @@ module rec ParticleSwarmOptimization =
     //--------------------------------------------------------------------------------------------------------------
        
     // Function to update the position of a member
-    let updateMemberPosition mem =
-        mem.position = mem.position + mem.velocity                                  // Update position
+    let updateAgentPosition agent =
+        agent.position = agent.position + agent.velocity                            // Update position
 
     // Function to update the position of a member
-    let updateMemberVelocity mem (omega : float) (c1 : float) (c2 : float) (gBest : float) =
+    let updateAgentVelocity agent (omega : float) (c1 : float) (c2 : float) (gBest : float) =
 
         let r1 = rand.NextDouble()                                                  // Generate random value r1
         let r2 = rand.NextDouble()                                                  // Generate random value r2
 
-        mem.velocity = (omega * mem.velocity) + (c1 * r1 * (mem.pBest - mem.position)) + (c2 * r2 * (gBest - mem.position))         // Update velocity
+        agent.velocity = (omega * agent.velocity) + (c1 * r1 * (agent.pBest - agent.position)) + (c2 * r2 * (gBest - agent.position))         // Update velocity
 
 
     // IMPLEMENTATIONS

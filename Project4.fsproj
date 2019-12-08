@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="PSO.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="tools.fs" />
     <Compile Include="Functions.fs" />

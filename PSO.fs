@@ -16,7 +16,7 @@ namespace Project4
 
 // Open the modules
 open Types
-
+open Functions
 // Declare as a module
 module rec ParticleSwarmOptimization = 
 
@@ -34,12 +34,7 @@ module rec ParticleSwarmOptimization =
     //}
 
     // Create a Population Member object to represent a member of the swarm(s)
-    type Agent = {
-        position                                : Genome                            // Current position
-        pBest                                   : Genome                            // Personal best
-        velocity                                : Genome                            // Current velocity
-        neighbors                               : Member[]                          // Population of neighbors
-    }
+
        
 
     // FUNCTIONS

@@ -24,14 +24,20 @@ module Functions =
     type Gene = float32                     // Type alias genes represet float32
     type Chromosome = Gene[,]               // Type alias Chromosomes represet 2D arrays of float32
     type Genome = Chromosome []             // Type alias Genomes represet Arrays of Chromosomes
-    type Population = Genome []             // Type alias Genomes represet Arrays of individuals (Genomes)
+    type Agent = {
+        position                                : Genome                            // Current position
+        pBest                                   : Genome                            // Personal best
+        velocity                                : Genome                            // Current velocity
+        neighbors                               : Agent[]                          // Population of neighbors
+    }
+    type Population = Agent []             // Type alias Genomes represet Arrays of individuals (Genomes)
 
     // RunGenerationOptions serves as metadata for a population
     type RunGenerationOptions =
         {
             sortByError                 : bool
             lossFn                      : float32[] -> float32[] -> float32
-            nextGenFn                   : (Genome*float32)[] -> Genome[] option 
+            nextGenFn                   : (Agent*float32)[] -> Agent[] option 
             converganceDeltaError       : float32
         }
 
@@ -269,20 +275,20 @@ module Functions =
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
 
     // Function to run the training set of the data
-    let runTrainingSet lossFunction (g:Genome) (trainingSet:float32[][]) (expectedResults:float32[][]) =
+    let runTrainingSet lossFunction (g:Agent) (trainingSet:float32[][]) (expectedResults:float32[][]) =
         trainingSet                                                                                             // Grab the training set                        
         |>Seq.zip expectedResults                                                                               // Zip with the expected results into tuples
         |>Seq.averageBy (fun (er,ts) ->                                                                         // Average the tiple values
-            let pred = runFeedForward g ts                                                                      // Run the feedforward neural network        
+            let pred = runFeedForward g.position ts                                                             // Run the feedforward neural network        
             calculateError lossFunction pred er                                                                 // Calculate the error of the results    
         )
 
     // Function to run a generation
     let runGeneration (options:RunGenerationOptions) (initialPopulation:Population) (trainingSet:float32[][]) (expectedResults:float32[][])  =
-        let rec loop (lastMinErr:float32) currentPopulation =                                                   // Loop through the current population
+        let rec loop (lastMinErr:float32) (currentPopulation:Population) =                                                   // Loop through the current population
             let popsWithErrors =                                                                                // Grab the population members with errors
                 currentPopulation                                                                               // For the current population ...
-                |>Array.map (fun g -> g,runTrainingSet options.lossFn g trainingSet expectedResults)            // ... map out the training set
+                |>Array.map (fun a -> a,runTrainingSet options.lossFn a trainingSet expectedResults)            // ... map out the training set
                 |>(if  options.sortByError then Array.sortBy snd else id)                                       // Sort based on error
             let minErr = popsWithErrors |> Seq.map snd |> Seq.min                                               // Grab the smallest error
             let errDelta = abs(lastMinErr-minErr)                                                               // Calculate the delta value
@@ -303,9 +309,9 @@ module Functions =
         loop System.Single.MaxValue initialPopulation
 
     // Function to run a Genetic Algorithm (GA) on the next generation
-    let simpleGANextGen mutationRate (popErrs:(Genome*float32)[]) =
+    let simpleGANextGen mutationRate (popErrs:(Agent*float32)[]) =
         let maxidx = popErrs.Length/2                                                                           // Grab the max ID index
-        let mean,stdDev = popErrs |> Seq.map fst |> getGenomeMeanAndStdDev                                      // Get the mean and standard deviation
+        let mean,stdDev = popErrs |> Seq.map (fun x -> (fst x).position)|> getGenomeMeanAndStdDev               // Get the mean and standard deviation
         let p = Array.zeroCreate popErrs.Length                                                                 // Create an array to represent the current population
         let mutable p_i = 0                                                                                     // Create an array to represent the next population
         while p_i < p.Length do                                                                                 
@@ -313,7 +319,7 @@ module Functions =
             let b,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
             
             let c_1,c_2 =                                                                                       // Create two children
-                uniformCrossoverGenome a b                                                                      // Perform crossover
+                uniformCrossoverGenome a.position b.position                                                    // Perform crossover
             genomeMutation mutationRate mean stdDev c_1                                                         // Mutate child 1
             genomeMutation mutationRate mean stdDev c_2                                                         // Mutate child 2
 

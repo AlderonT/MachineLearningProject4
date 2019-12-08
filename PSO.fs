@@ -11,9 +11,11 @@
 // MODULES
 //--------------------------------------------------------------------------------------------------------------
     
+// Assign to Project4 Namespace
+namespace Project4
+
 // Open the modules
-open Tools
-open Tools.Extensions
+open Types
 
 // Declare as a module
 module rec ParticleSwarmOptimization = 
@@ -23,12 +25,20 @@ module rec ParticleSwarmOptimization =
     //--------------------------------------------------------------------------------------------------------------
         
     // Create a Population Member object to represent a member of the swarm(s)
+    //type oldMember = {
+    //    id                                      : int                               // ID value of the member
+    //    neighbors                               : int[]                             // Array of neighbor IDs
+    //    position                                : float32                           // Current position
+    //    velocity                                : float32                           // Current velocity
+    //    pBest                                   : float32                           // Personal best
+    //}
+
+    // Create a Population Member object to represent a member of the swarm(s)
     type Member = {
-        id                                      : int                               // ID value of the member
-        neighbors                               : int[]                             // Array of neighbor IDs
-        position                                : float32                           // Current position
-        velocity                                : float32                           // Current velocity
-        pBest                                   : float32                           // Personal best
+        position                                : Genome                            // Current position
+        pBest                                   : Genome                            // Personal best
+        velocity                                : Genome                            // Current velocity
+        neighbors                               : Member[]                             // Population of neighbors
     }
        
 

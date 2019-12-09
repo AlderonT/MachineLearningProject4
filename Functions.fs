@@ -279,7 +279,16 @@ module Functions =
 
     // Function to update the position of a member
     let updateAgentPosition agent =
-        agent.position = agent.position + agent.velocity                            // Update position
+        
+        for i = 0 to agent.position.Length do                                           // Iterate through the agent's position genome length
+            for j = 0 to agent.position.[0].Length do                                   // Iterate through the agent's position genome's chromosome length
+                for k = 0 to agent.position.[0].[0].GetLength(0) do                     // Iterate through the agent's position genome's chromosome width
+                    let a = agent.position[i].[j].[k]                                   // Get the agent's position
+                    a = a + agent.velocity[i].[j].[k]                                   // Get the agent's velocity
+        
+        
+        
+        // agent.position = agent.position + agent.velocity                            // Update position
 
     // Function to update the position of a member
     let updateAgentVelocity agent (omega : float) (c1 : float) (c2 : float) (gBest : float) =

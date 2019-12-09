@@ -4,119 +4,27 @@
 //  Assignment #4, Fall 2019
 //  Chris Major, Farshina Nazrul-Shimim, Tysen Radovich, Allen Simpson
 //
-//  [DESCRIPTION]
+//  Implementation of several population algorithms to train a feedforward neural network
 //
 //--------------------------------------------------------------------------------------------------------------
 
 // MODULES
 //--------------------------------------------------------------------------------------------------------------
-
-
-// Load the file names from the same folder
-//#load "FeedforwardNet.fsx"
-//#load "RBFNet.fsx"
-//#load "tools.fsx"
+namespace Project4 
     
 // Open the modules
-//open FeedforwardNet
-//open RBFNet
-open Tools
-open Tools.Extensions
-open Util
-//open Gaussian.GaussianFunction
+open Extensions
+open Functions
+//open Util
+open Types
 
 // Declare as a module
 module rec Assignment3 = 
 
-
-// OBJECTS
-//--------------------------------------------------------------------------------------------------------------
-        
-    // Create a Metadata object to distinguish real and categorical attributes by index
-    type DataSetMetadata = 
-        abstract member getRealAttributeNodeIndex           : int -> int            // Indices of the real attributes
-        abstract member getCategoricalAttributeNodeIndices  : int -> int[]          // Indices of the categorical attributes
-        abstract member inputNodeCount                      : int                   // number of input nodes
-        abstract member outputNodeCount                     : int                   // number of output nodes
-        abstract member getClassByIndex                     : int -> string         // get the class associated with this node's index
-        abstract member fillExpectedOutput                  : Point -> float32[] -> unit    //assigned the expected output of Point to the float32[]
-        abstract member isClassification                    : bool                  //stores if this dataset is classification
-
-    // Create a Layer object to represent a layer within the neural network
-    type Layer = {
-        nodes                                   : float32[]                         // Sequence to make up vectors
-        nodeCount                               : int                               // Number of nodes in the layer
-        deltas                                  : float32[]                         // sacrificing space for speed
-    }
-    // Create a ConnectionMatrix object to represent the connection matrix within the neural network
-    type ConnectionMatrix = {
-        weights                                 : float32[]                         // Sequence of weights within the matrix
-        inputLayer                              : Layer                             // Input layer
-        outputLayer                             : Layer                             // Output layer
-    }
-    // Create a Network object to represent a neural network
-    type Network = {
-        layers                                  : Layer[]                           // Array of layers within the network
-        connections                             : ConnectionMatrix[]                // Array of connections within the network
-    }
-        with 
-            member this.outLayer = this.layers.[this.layers.Length-1]
-            member this.inLayer = this.layers.[0]
-
-    // Create a Point object to represent a point within the data
-    type Point = {
-        realAttributes                          : float32[]                         // the floating point values for the real points
-        categoricalAttributes                   : int[]                             // the values for categorical attributes. distance will be discrete
-        cls                                     : string option
-        regressionValue                         : float option
-        metadata                                : DataSetMetadata
-    }
-
-        // Method for the Point object (not entirely functional but simple enough for application)
-        with 
-            member this.distance p = //sqrt((Real distance)^2+(categorical distance)^2) //categorical distance = 1 if different value, or 0 if same value
-                (Seq.zip this.realAttributes p.realAttributes|> Seq.map (fun (a,b) -> a-b)|> Seq.sumBy (fun d -> d*d))
-                + (Seq.zip this.categoricalAttributes p.categoricalAttributes |> Seq.sumBy (fun (a,b)-> if a=b then 0.f else 1.f))
-                |>sqrt 
-    
-
-    type Pop = {
-        chromosomes             : float32[][]
-        neighbors               : Population
-        velocity                : float32[][]
-        pBest                   : float32[][]
-    }
-        with 
-            member calculateFitness trainingSet = 
-                let MSE =
-                    trainingSet
-                    |> Seq.map ( fun p ->
-                        runNetwork metadata network p 
-                        |> fun (_,_,err) -> err*err
-                    )
-                    |>Seq.average
-                MSE
-            member updateVelocity = 
-                let rnd = System.Random()
-                fun () ->
-                    let omega = 0.2f //tune inertia!
-                    let phi_1 = 0.5f * rnd.NextDouble() //tune the float
-                    let phi_2 = 0.5f * rnd.NextDouble() //tune the float
-                    velocity
-                    |> Array.iteri (fun i c -> c |> Array.mapi (fun j (v:float32) -> (omega * v) + (phi_1*(pBest-chromosomes.[i].[j])) + (phi_2 * (neighbors.gBest()-chromosomes.[i].[j])))) // v(t) = omega * v(t-1) + c_1 * r_1 * (pBest - x(t)) + c_2 * r_2 * (gBest - x(t))  
-
-    type Population = {
-        pops                    : Pop[]
-    }
-        with 
-            abstract member gBest: unit -> float32
-
-
-
-// FUNCTIONS
-//--------------------------------------------------------------------------------------------------------------
+    // FUNCTIONS
+    //--------------------------------------------------------------------------------------------------------------
        
-    //// How to get a dataset from a file
+    // How to get a dataset from a file
     let fetchTrainingSet filePath isCommaSeperated hasHeader =
         System.IO.File.ReadAllLines(filePath)                           // this give you back a set of line from the file (replace with your directory)
         |> Seq.map (fun v -> v.Trim())                                  // trim the sequence
@@ -232,6 +140,7 @@ module rec Assignment3 =
                 }
             ) |> Seq.toArray
         dataSet,metadata
+
     let setInputLayerForPoint (n:Network) (p:Point) =
         let inputLayer = n.layers.[0]
         for i = inputLayer.nodeCount to inputLayer.nodes.Length-1 do 
@@ -248,6 +157,27 @@ module rec Assignment3 =
                 inputLayer.nodes.[nidx] <- if i = attributeValue then 1.f else 0.f 
             )
         )
+
+    let getInputLayerFromPoint (p:Point) =
+        let inputLayer = Array.zeroCreate (p.realAttributes.Length + p.metadata.inputNodeCount)
+        p.realAttributes 
+        |> Seq.iteri (fun idx attributeValue -> 
+            let nidx = p.metadata.getRealAttributeNodeIndex idx 
+            inputLayer.[nidx] <- attributeValue 
+        )
+        p.categoricalAttributes 
+        |> Seq.iteri (fun idx attributeValue -> 
+            let nidxs = p.metadata.getCategoricalAttributeNodeIndices idx
+            nidxs |> Seq.iteri (fun i nidx ->
+                inputLayer.[nidx+p.realAttributes.Length] <- if i = attributeValue then 1.f else 0.f 
+            )
+        )
+        inputLayer
+
+    let getOutputLayerFromPoint (p:Point) =
+        let outputLayer = Array.zeroCreate (p.metadata.outputNodeCount)
+        p.metadata.fillExpectedOutput p outputLayer
+        outputLayer
 
     let createNetwork (metadata:DataSetMetadata) hiddenLayerSizes =    
         let multipleOfFour i =  i+((4-(i%4))%4)
@@ -293,6 +223,7 @@ module rec Assignment3 =
             layers = layers 
             connections = layers |> Seq.pairwise |> Seq.map createConnectionMatrix |> Seq.toArray
         }
+
     let initializeNetwork network = 
         let rand = System.Random()
         let initializeConnectionMatrix cMatrix = 
@@ -357,8 +288,8 @@ module rec Assignment3 =
         let outLayer = network.outLayer
         let mutable errSum = 0.f
         for i = 0 to outLayer.nodeCount-1 do 
-            errSum <- let d = outLayer.nodes.[i] - expectedoutput.[i] in d*d+errSum
-        errSum/2.f
+            errSum <- let d = outLayer.nodes.[i] - expectedoutput.[i] in d*d+errSum                         //we square the difference between the output and expected node and sum it
+        errSum/2.f                                                                                          //then divide by 2 to make the derivitave easier
 
     let backprop learningRate (network: Network) (expectedOutputs:float32[]) =
         let outputLayer = network.outLayer 
@@ -435,62 +366,116 @@ module rec Assignment3 =
                 folds.[j%k] <- seq { yield! s; yield e }    //create a new seqence containing the old sequence (at j%k) and the new element e, and put it back into slot (j%k)
                 generate (j+1)                              //increment j and run again
         generate 0                                          //calls the generate function
-    
+
+    let generateFoldInputsAndOutputs (dataSet:Point seq) =
+        let generateTrainingSetInputs (dataSet:Point seq) = 
+            dataSet
+            |> Seq.map(fun p -> getInputLayerFromPoint p) |> Seq.toArray
+        
+        let generateTrainingSetOutputs (dataSet:Point seq) =
+            dataSet
+            |> Seq.map(fun p -> getOutputLayerFromPoint p) |> Seq.toArray
+        getRandomFolds 10 dataSet 
+        |> Array.map (fun fo -> generateTrainingSetInputs fo,generateTrainingSetOutputs fo)
+        
+        
 
 // IMPLEMENTATIONS
 //--------------------------------------------------------------------------------------------------------------
            
 //
 open Assignment3
-
-[<EntryPoint>]
-let main argv =
-    let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-    let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
-    let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
-    let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
-    let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
-    let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
-    let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
-    let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
-    //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+module Main =
+    [<EntryPoint>]
+    let main argv =
+        //let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+        //let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
+        //let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
+        //let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
+        //let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
+        //let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
+        //let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
+        let dsmd1 = (fullDataset @"..\..\..\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+        let dsmd2 = (fullDataset @"..\..\..\Data\car.data" (Some 6) None 2. true false)
+        let dsmd3 = (fullDataset @"..\..\..\Data\forestfires.csv" None (Some 12) 2. true true)
+        let dsmd4 = (fullDataset @"..\..\..\Data\machine.data" None (Some 9) 2. true false )
+        let dsmd5 = (fullDataset @"..\..\..\Data\segmentation.data" (Some 0) None 2. true true)
+        let dsmd6 = (fullDataset @"..\..\..\Data\winequality-red.csv" None (Some 9) 2. false true)
+        let dsmd7 = (fullDataset @"..\..\..\Data\winequality-white.csv" None (Some 11) 2. false true)
+        let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
+        //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
     
-    datasets
-    |>Seq.map (fun (ds,metadata)->
-        let network = createNetwork metadata [|10;10|]   //Change this to contain an integer for the number of nodes per layer [|layer1;layer2;layer3|]
-        initializeNetwork network 
-        let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
-        //let trainingSet=trainingSet.[0..0]
-        trainNetworkToErr 0.01f 2.0f metadata network trainingSet
-        let MSE =
-            testSet
-            |> Seq.map ( fun p ->
-                runNetwork metadata network p 
-                |> fun (_,_,err) -> err*err
+        
+
+        datasets
+        |>Seq.map (fun (ds,metadata)->
+            let genomeSizes = seq {
+                yield metadata.inputNodeCount
+                yield 10
+                yield 10
+                yield metadata.outputNodeCount
+            }
+            let options = {
+                sortByError = true
+                lossFn = if metadata.isClassification then Functions.crossEntropyLoss else Functions.MSELoss
+                nextGenFn = Functions.simpleGANextGen 0.02
+                converganceDeltaError = 0.001f
+            }
+            let foldInputsAndOutputs = generateFoldInputsAndOutputs ds
+            foldInputsAndOutputs 
+            |> Array.mapi (fun i _ -> 
+                let validationSet = foldInputsAndOutputs.[i]
+                let trainingSet = 
+                    let res = Array.zeroCreate (foldInputsAndOutputs.Length-1)
+                    for j = 0 to res.Length-1 do 
+                        if j=i then () 
+                        else res.[j] <- foldInputsAndOutputs.[j]
+                    res
+                validationSet,trainingSet
             )
-            |>Seq.average
-        MSE
-    )
-    |> Seq.toArray
-    |> Array.iter (fun x-> printfn "MSE: %f" x)
-    0
-    //let ds,metadata = dsmd3
-    //let network = createNetwork metadata [|10;10|]
-    //initializeNetwork network 
-    //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
-    //let trainingSet=trainingSet.[0..0]
-    //trainNetworkToErr 0.01f 2.f metadata network trainingSet
-    //let MSE =
-    //    testSet
-    //    |> Seq.map ( fun p ->
-    //        runNetwork metadata network p 
-    //        |> fun (_,_,err) -> err*err
-    //    )
-    //    |>Seq.average
-    //printfn "MSE: %f" MSE
-    //0
+            |> Array.map (fun (validationSet,trainingSet) -> 
+                let agents = 
+                    trainingSet
+                    |> Array.map (fun (tsi,tso) -> 
+                        runGeneration options (initializePopulatation genomeSizes 100)  tsi tso)
+                let outputs = 
+                    validationSet 
+                    |> fun x ->  fst x
+                    |> Array.mapi (fun i vi -> 
+                        runFeedForward agents.[i].position vi    
+                    )
+                let error = 
+                    let expectedvs= 
+                        validationSet 
+                        |> fun x ->  fst x
+                    outputs
+                    |> Array.zip expectedvs
+                    |> Array.map (fun (o,e) -> MSELoss o e)
 
-    //Networks: 10x10x10, 5x5x10, and 8x4x7
+                error |> Array.average
+            )
+            |> Seq.toArray
+            |> Array.iter (fun x -> printfn "MSE: %f" x)
+        )
+        |> Seq.toArray
+        0
+        //let ds,metadata = dsmd3
+        //let network = createNetwork metadata [|10;10|]
+        //initializeNetwork network 
+        //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
+        //let trainingSet=trainingSet.[0..0]
+        //trainNetworkToErr 0.01f 2.f metadata network trainingSet
+        //let MSE =
+        //    testSet
+        //    |> Seq.map ( fun p ->
+        //        runNetwork metadata network p 
+        //        |> fun (_,_,err) -> err*err
+        //    )
+        //    |>Seq.average
+        //printfn "MSE: %f" MSE
+        //0
+
+        //Networks: 10x10x10, 5x5x10, and 8x4x7
     
-//--------------------------------------------------------------------------------------------------------------
-// END OF CODE
+    //--------------------------------------------------------------------------------------------------------------
+    // END OF CODE

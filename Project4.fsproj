@@ -9,7 +9,6 @@
     <Compile Include="Types.fs" />
     <Compile Include="tools.fs" />
     <Compile Include="Functions.fs" />
-    <Compile Include="PSO.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

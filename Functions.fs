@@ -278,25 +278,35 @@ module Functions =
     //--------------------------------------------------------------------------------------------------------------
 
     // Function to update the position of a member
-    let updateAgentPosition agent =
+    let updateAgentPosition (agent : Agent) =
         
         for i = 0 to agent.position.Length do                                           // Iterate through the agent's position genome length
-            for j = 0 to agent.position.[0].Length do                                   // Iterate through the agent's position genome's chromosome length
-                for k = 0 to agent.position.[0].[0].GetLength(0) do                     // Iterate through the agent's position genome's chromosome width
-                    let a = agent.position[i].[j].[k]                                   // Get the agent's position
-                    a = a + agent.velocity[i].[j].[k]                                   // Get the agent's velocity
-        
-        
+            for j = 0 to agent.position.[0].GetLength(0) do                             // Iterate through the agent's position genome's chromosome length
+                for k = 0 to agent.position.[0].GetLength(1) do                         // Iterate through the agent's position genome's chromosome width
+                    let pos = agent.position.[i].[j,k]                                  // Get the agent's position genome's chromosome
+                    let vel = agent.velocity.[i].[j,k]                                  // Get the agent's velocity genome's chromosome
+                    agent.position.[i].[j,k] <- pos + vel                               // Add
+
         
         // agent.position = agent.position + agent.velocity                            // Update position
 
     // Function to update the position of a member
-    let updateAgentVelocity agent (omega : float) (c1 : float) (c2 : float) (gBest : float) =
+    let updateAgentVelocity agent (omega : float32) (c1 : float32) (c2 : float32) (gBest : Genome) =
 
-        let r1 = rand.NextDouble()                                                  // Generate random value r1
-        let r2 = rand.NextDouble()                                                  // Generate random value r2
+        let r1 = nextFloat32()                                                          // Generate random value r1
+        let r2 = nextFloat32()                                                          // Generate random value r2
 
-        agent.velocity = (omega * agent.velocity) + (c1 * r1 * (agent.pBest - agent.position)) + (c2 * r2 * (gBest - agent.position))         // Update velocity
+        for i = 0 to agent.position.Length do                                           // Iterate through the agent's position genome length
+            for j = 0 to agent.position.[0].GetLength(0) do                             // Iterate through the agent's position genome's chromosome length
+                for k = 0 to agent.position.[0].GetLength(1) do                         // Iterate through the agent's position genome's chromosome width
+                    let vel = agent.velocity.[i].[j,k]                                  // Get the agent's velocity genome's chromosome
+                    let pos = agent.position.[i].[j,k]
+                    let pBest = agent.pBest.[i].[j,k]
+                    let g = gBest.[i].[j,k]
+
+                    agent.velocity.[i].[j,k] <- (omega * vel) + (c1 * r1 * (pBest - pos)) + (c2 * r2 * (g - pos))       // Recalculate
+
+
 
 
     // RUNTIME FUNCTIONS
@@ -313,7 +323,7 @@ module Functions =
 
     // Function to run a generation
     let runGeneration (options:RunGenerationOptions) (initialPopulation:Population) (trainingSet:float32[][]) (expectedResults:float32[][])  =
-        let rec loop (lastMinErr:float32) (currentPopulation:Population) =                                                   // Loop through the current population
+        let rec loop (lastMinErr:float32) (currentPopulation:Population) =                                      // Loop through the current population
             let popsWithErrors =                                                                                // Grab the population members with errors
                 currentPopulation                                                                               // For the current population ...
                 |>Array.map (fun a -> a,runTrainingSet options.lossFn a trainingSet expectedResults)            // ... map out the training set
@@ -350,20 +360,23 @@ module Functions =
                 uniformCrossoverGenome a.position b.position                                                    // Perform crossover
             genomeMutation mutationRate mean stdDev c_1                                                         // Mutate child 1
             genomeMutation mutationRate mean stdDev c_2                                                         // Mutate child 2
+            let ac_1 = {a with position = c_1} 
+            let ac_2 = {b with position = c_2} 
+                
 
-            p.[p_i] <- c_1                                                                                      // Update the population ...
+            p.[p_i] <- ac_1                                                                                      // Update the population ...
             p_i <- p_i+1
             if p_i < p.Length then
-                p.[p_i] <- c_1                                                                                  // ... with the child
+                p.[p_i] <- ac_2                                                                                  // ... with the child
                 p_i <- p_i+1                                                                                    // ... with the previous member
         Some p  
        
        
     // Function for performing PSO
     let simplePSO (popErrs:(Agent*float32)[]) = 
-        let omega = 1                                                                                           // Assign omega
-        let c1 = 1                                                                                              // [PSO] Assign c1
-        let c2 = 1                                                                                              // [PSO] Assign c2
+        let omega = 1.0f                                                                                           // Assign omega
+        let c1 = 1.0f                                                                                              // [PSO] Assign c1
+        let c2 = 1.0f                                                                                              // [PSO] Assign c2
         let gBest = popErrs |> Seq.map fst |> Seq.head |> fun x -> x.pBest                                      // Get gBest from all possible pBests                                         // Update gBest            
         popErrs                                                                                                 // Perform PSO
         |> Seq.map (fun (a, e) ->                                                                               // Map through the population's errors
@@ -371,13 +384,24 @@ module Functions =
             updateAgentPosition a                                                                               // [PSO] Update position
             updateAgentVelocity a omega c1 c2 gBest                                                             // [PSO] Update velocity
             a                                                                                                   // Return a
+        ) |> Seq.toArray |> (fun x -> match x.Length with    
+            | 0 -> None
+            | _ -> Some x
         )
             
 
     // Function to initialize a population
     let initializePopulatation (genomeDescriptor:seq<int>) size =
         Array.init size (fun _ ->                                                                               // Initialize an array ...
-            initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
+            
+            {                          // Type for an array of individuals
+                position = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
+                pBest = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
+                velocity = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
+                neighbors = Array.zeroCreate 0
+                bestError = 0.0f
+            }
+            
         )
 
 

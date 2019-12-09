@@ -4,7 +4,7 @@
 //  Assignment #4, Fall 2019
 //  Chris Major, Farshina Nazrul-Shimim, Tysen Radovich, Allen Simpson
 //
-//  [DESCRIPTION]
+//  Implementation of several population algorithms to train a feedforward neural network
 //
 //--------------------------------------------------------------------------------------------------------------
 
@@ -14,7 +14,8 @@ namespace Project4
     
 // Open the modules
 open Extensions
-open Util
+open Functions
+//open Util
 open Types
 
 // Declare as a module
@@ -156,6 +157,27 @@ module rec Assignment3 =
                 inputLayer.nodes.[nidx] <- if i = attributeValue then 1.f else 0.f 
             )
         )
+
+    let getInputLayerFromPoint (p:Point) =
+        let inputLayer = Array.zeroCreate (p.realAttributes.Length + p.metadata.inputNodeCount)
+        p.realAttributes 
+        |> Seq.iteri (fun idx attributeValue -> 
+            let nidx = p.metadata.getRealAttributeNodeIndex idx 
+            inputLayer.[nidx] <- attributeValue 
+        )
+        p.categoricalAttributes 
+        |> Seq.iteri (fun idx attributeValue -> 
+            let nidxs = p.metadata.getCategoricalAttributeNodeIndices idx
+            nidxs |> Seq.iteri (fun i nidx ->
+                inputLayer.[nidx+p.realAttributes.Length] <- if i = attributeValue then 1.f else 0.f 
+            )
+        )
+        inputLayer
+
+    let getOutputLayerFromPoint (p:Point) =
+        let outputLayer = Array.zeroCreate (p.metadata.outputNodeCount)
+        p.metadata.fillExpectedOutput p outputLayer
+        outputLayer
 
     let createNetwork (metadata:DataSetMetadata) hiddenLayerSizes =    
         let multipleOfFour i =  i+((4-(i%4))%4)
@@ -344,7 +366,19 @@ module rec Assignment3 =
                 folds.[j%k] <- seq { yield! s; yield e }    //create a new seqence containing the old sequence (at j%k) and the new element e, and put it back into slot (j%k)
                 generate (j+1)                              //increment j and run again
         generate 0                                          //calls the generate function
-    
+
+    let generateFoldInputsAndOutputs (dataSet:Point seq) =
+        let generateTrainingSetInputs (dataSet:Point seq) = 
+            dataSet
+            |> Seq.map(fun p -> getInputLayerFromPoint p) |> Seq.toArray
+        
+        let generateTrainingSetOutputs (dataSet:Point seq) =
+            dataSet
+            |> Seq.map(fun p -> getOutputLayerFromPoint p) |> Seq.toArray
+        getRandomFolds 10 dataSet 
+        |> Array.map (fun fo -> generateTrainingSetInputs fo,generateTrainingSetOutputs fo)
+        
+        
 
 // IMPLEMENTATIONS
 //--------------------------------------------------------------------------------------------------------------
@@ -354,16 +388,25 @@ open Assignment3
 module Main =
     [<EntryPoint>]
     let main argv =
-        let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-        let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
-        let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
-        let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
-        let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
-        let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
-        let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
+        //let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+        //let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
+        //let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
+        //let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
+        //let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
+        //let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
+        //let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
+        let dsmd1 = (fullDataset @"..\..\..\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+        let dsmd2 = (fullDataset @"..\..\..\Data\car.data" (Some 6) None 2. true false)
+        let dsmd3 = (fullDataset @"..\..\..\Data\forestfires.csv" None (Some 12) 2. true true)
+        let dsmd4 = (fullDataset @"..\..\..\Data\machine.data" None (Some 9) 2. true false )
+        let dsmd5 = (fullDataset @"..\..\..\Data\segmentation.data" (Some 0) None 2. true true)
+        let dsmd6 = (fullDataset @"..\..\..\Data\winequality-red.csv" None (Some 9) 2. false true)
+        let dsmd7 = (fullDataset @"..\..\..\Data\winequality-white.csv" None (Some 11) 2. false true)
         let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
         //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
     
+        
+
         datasets
         |>Seq.map (fun (ds,metadata)->
             let genomeSizes = seq {
@@ -373,29 +416,48 @@ module Main =
                 yield metadata.outputNodeCount
             }
             let options = {
-                
                 sortByError = true
                 lossFn = if metadata.isClassification then Functions.crossEntropyLoss else Functions.MSELoss
-                nextGenFn = Functions.simpleGANextGen 0.1f
+                nextGenFn = Functions.simpleGANextGen 0.02
                 converganceDeltaError = 0.001f
             }
-            ()
-            //let network = createNetwork metadata [|10;10|]   //Change this to contain an integer for the number of nodes per layer [|layer1;layer2;layer3|]
-            //initializeNetwork network 
-            //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
-            ////let trainingSet=trainingSet.[0..0]
-            //trainNetworkToErr 0.01f 2.0f metadata network trainingSet
-            //let MSE =
-            //    testSet
-            //    |> Seq.map ( fun p ->
-            //        runNetwork metadata network p 
-            //        |> fun (_,_,err) -> err*err
-            //    )
-            //    |>Seq.average
-            //MSE
+            let foldInputsAndOutputs = generateFoldInputsAndOutputs ds
+            foldInputsAndOutputs 
+            |> Array.mapi (fun i _ -> 
+                let validationSet = foldInputsAndOutputs.[i]
+                let trainingSet = 
+                    let res = Array.zeroCreate (foldInputsAndOutputs.Length-1)
+                    for j = 0 to res.Length-1 do 
+                        if j=i then () 
+                        else res.[j] <- foldInputsAndOutputs.[j]
+                    res
+                validationSet,trainingSet
+            )
+            |> Array.map (fun (validationSet,trainingSet) -> 
+                let agents = 
+                    trainingSet
+                    |> Array.map (fun (tsi,tso) -> 
+                        runGeneration options (initializePopulatation genomeSizes 100)  tsi tso)
+                let outputs = 
+                    validationSet 
+                    |> fun x ->  fst x
+                    |> Array.mapi (fun i vi -> 
+                        runFeedForward agents.[i].position vi    
+                    )
+                let error = 
+                    let expectedvs= 
+                        validationSet 
+                        |> fun x ->  fst x
+                    outputs
+                    |> Array.zip expectedvs
+                    |> Array.map (fun (o,e) -> MSELoss o e)
+
+                error |> Array.average
+            )
+            |> Seq.toArray
+            |> Array.iter (fun x -> printfn "MSE: %f" x)
         )
         |> Seq.toArray
-        |> Array.iter (fun x-> printfn "MSE: %f" x)
         0
         //let ds,metadata = dsmd3
         //let network = createNetwork metadata [|10;10|]

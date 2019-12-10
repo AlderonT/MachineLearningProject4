@@ -386,53 +386,118 @@ module rec Assignment3 =
 //
 open Assignment3
 module Main =
+
+    let test () =
+        let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project4\Data\xor.data" (Some 0) None 2. true false)
+        let _,metadata = dsmd1
+        let genomeSizes = seq {
+            yield metadata.inputNodeCount
+            yield 2
+            yield metadata.outputNodeCount
+        }
+        let options = {
+            sortByError = true
+            lossFn = if metadata.isClassification then Functions.countingLoss else Functions.MSELoss
+            //lossFn =  Functions.MSELoss
+            //lossFn = Functions.countingLoss
+            nextGenFn = Functions.simpleGANextGen 0.05 //0.02
+            converganceDeltaError = -1.000f
+            maxGens = 100
+        }
+        let validationSet,trainingSet =
+            let foldInputsAndOutputs = generateFoldInputsAndOutputs (fst <| dsmd1)
+            foldInputsAndOutputs
+            |> Array.mapi (fun i v -> 
+                    let validationSet = v
+                    let trainingSet = 
+                        let res = ResizeArray ()
+                        for j = 0 to foldInputsAndOutputs.Length-1 do 
+                            if j<>i then res.Add foldInputsAndOutputs.[j] 
+                        res 
+                        |> Seq.fold (fun (i_s,o_s) (i,o)->
+                            seq {yield! i_s;yield!i}, 
+                            seq {yield! o_s;yield!o}
+                        ) (Seq.empty,Seq.empty)
+                        |> fun (i_s,o_s) -> (i_s |> Seq.toArray),(o_s|>Seq.toArray)
+                    validationSet,trainingSet
+            )
+            |> Seq.head
+        let validationSet, trainingSet =
+            let s =
+                trainingSet
+                |> fun (i,o) ->
+                    o
+                    |> Seq.zip i
+                    |> Seq.groupBy fst
+                    |> Seq.map (fun (k,s) -> s|>Seq.head)
+                    |> Seq.toArray
+                    |> Array.unzip
+            s,s            
+        
+
+        let agent =
+            let tsi,tso = trainingSet
+            runGeneration options (initializePopulatation genomeSizes 10000)  tsi tso
+        let outputs = 
+            validationSet 
+            |> fun x ->  fst x
+            |> Array.map (fun vi -> 
+                runFeedForward agent.position vi    
+            )
+        let error = 
+            let expectedvs= 
+                validationSet 
+                |> fun x ->  snd x
+            outputs
+            |> Array.zip expectedvs
+            |> Array.mapi (fun i (e,o) -> 
+                let err = options.lossFn o e
+                printf "idx: %d" i
+                printf " input: %A" (validationSet |> snd).[i]
+                Seq.zip o e
+                |> Seq.iteri (fun c (p, e) -> printf " %d:[%f,%f] [%A,%A]" c p e (p<0.5f) (e<0.5f))
+                printfn ""
+                //printfn "idx: %A \nPredicted: %A \nExpected %A \nerror: %A" i o e err
+                err
+            )
+
+        error |> Array.average
+
     [<EntryPoint>]
     let main argv =
-        //let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-        //let dsmd2 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\car.data" (Some 6) None 2. true false)
-        //let dsmd3 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\forestfires.csv" None (Some 12) 2. true true)
-        //let dsmd4 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\machine.data" None (Some 9) 2. true false )
-        //let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
-        //let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
-        //let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
-        let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project4\Data\xor.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-
-        let fiao = generateFoldInputsAndOutputs (fst <| dsmd1)
-
-
-        //let dsmd2 = (fullDataset @"..\..\..\Data\car.data" (Some 6) None 2. true false)
-        //let dsmd3 = (fullDataset @"..\..\..\Data\forestfires.csv" None (Some 12) 2. true true)
-        //let dsmd4 = (fullDataset @"..\..\..\Data\machine.data" None (Some 9) 2. true false )
-        //let dsmd5 = (fullDataset @"..\..\..\Data\segmentation.data" (Some 0) None 2. true true)
-        //let dsmd6 = (fullDataset @"..\..\..\Data\winequality-red.csv" None (Some 9) 2. false true)
-        //let dsmd7 = (fullDataset @"..\..\..\Data\winequality-white.csv" None (Some 11) 2. false true)
-        //let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
-        //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-        let datasets =[|dsmd1|]
+        //Define our datasets
+        let dsmd2 = (fullDataset @"..\..\..\Data\abalone.data" (Some 0) None 2. true false)
+        let dsmd1 = (fullDataset @"..\..\..\Data\car.data" (Some 6) None 2. true false)
+        let dsmd3 = (fullDataset @"..\..\..\Data\forestfires.csv" None (Some 12) 2. true true)
+        let dsmd4 = (fullDataset @"..\..\..\Data\machine.data" None (Some 9) 2. true false )
+        let dsmd5 = (fullDataset @"..\..\..\Data\segmentation.data" (Some 0) None 2. true true)
+        let dsmd6 = (fullDataset @"..\..\..\Data\winequality-red.csv" None (Some 9) 2. false true)
+        let dsmd7 = (fullDataset @"..\..\..\Data\winequality-white.csv" None (Some 11) 2. false true)
+        let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
+        
+        //Here is where we are calling all the code for running population algorithms.
         datasets
         |>Seq.map (fun (ds,metadata)->
             let genomeSizes = seq {
                 yield metadata.inputNodeCount
-                yield 5
-                yield 5
-                yield 5
+                yield 10                                                                                    //set here how many nodes are in the first hidden layer
+                //yield 10                                                                                  //set here how many nodes are in the first hidden layer     //comment a line to do one less layer in the call
+                //yield 10                                                                                  //set here how many nodes are in the first hidden layer     //comment a line to do one less layer in the call
                 yield metadata.outputNodeCount
             }
             let options = {
-                sortByError = true
-                //lossFn = if metadata.isClassification then Functions.countingLoss else Functions.MSELoss
-                //lossFn =  Functions.MSELoss
-                lossFn = Functions.countingLoss
-                nextGenFn = Functions.simpleGANextGen 0.02 //0.02
-                converganceDeltaError = -1.000f
-                maxGens = 100
+                sortByError = true                                                                          //will not hurt any algorithm
+                lossFn = if metadata.isClassification then Functions.countingLoss else Functions.MSELoss    //already set no tuning required
+                nextGenFn = Functions.simpleGANextGen 0.15 //0.02                                           //change this function out with the population algorithm being tested
+                converganceDeltaError = -1.000f                                                             //we have undone convergance checks this value is ignored
+                maxGens = 20                                                                                //limit how many generations go
             }
-            let foldInputsAndOutputs = generateFoldInputsAndOutputs ds
-            foldInputsAndOutputs 
-            |> Array.mapi (fun i v -> 
-                let validationSet = v
-                let trainingSet = 
-                    let res = ResizeArray ()
+            let foldInputsAndOutputs = generateFoldInputsAndOutputs ds                                      //gets the parts needed for testing the algorihtm
+            foldInputsAndOutputs                                                                            //iterate over each fold
+            |> Array.mapi (fun i v ->                                                                       //maping the fold to the result of this lambda
+                let validationSet = v                                                                       //the validation set 
+                let trainingSet =                                                                           //grab the training set our of our folds
+                    let res = ResizeArray ()                                                                
                     for j = 0 to foldInputsAndOutputs.Length-1 do 
                         if j<>i then res.Add foldInputsAndOutputs.[j] 
                     res 
@@ -441,19 +506,19 @@ module Main =
                         seq {yield! o_s;yield!o}
                     ) (Seq.empty,Seq.empty)
                     |> fun (i_s,o_s) -> (i_s |> Seq.toArray),(o_s|>Seq.toArray)
-                validationSet,trainingSet
+                validationSet,trainingSet                                                                   //return as a tuple, the validation and training set
             )
             |> Array.map (fun (validationSet,trainingSet) -> 
-                let agent =
+                let agent =                                                                                 //here we are defining the agent we are looking at
                     let tsi,tso = trainingSet
-                    runGeneration options (initializePopulatation genomeSizes 100)  tsi tso
-                let outputs = 
+                    runGeneration options (initializePopulatation genomeSizes 1000)  tsi tso
+                let outputs =                                                                               //defining the outputs
                     validationSet 
                     |> fun x ->  fst x
-                    |> Array.mapi (fun i vi -> 
+                    |> Array.map (fun vi -> 
                         runFeedForward agent.position vi    
                     )
-                let error = 
+                let error =                                                                                 //here we get the error from running the algorihtm
                     let expectedvs= 
                         validationSet 
                         |> fun x ->  snd x
@@ -461,20 +526,21 @@ module Main =
                     |> Array.zip expectedvs
                     |> Array.mapi (fun i (e,o) -> 
                         let err = options.lossFn o e
-                        printf "idx: %d" i
-                        Seq.zip o e
-                        |> Seq.iteri (fun c (p, e) -> printf " %d:[%f,%f] [%A,%A]" c p e (p<0.5f) (e<0.5f))
-                        printfn ""
+                        
+                        //printf " input: %A" (validationSet |> snd).[i]
+                        //Seq.zip o e
+                        //|> Seq.iteri (fun c (p, e) -> printf " %d:[%f,%f] [%A,%A]" c p e (p<0.5f) (e<0.5f))
+                        //printfn ""
                         //printfn "idx: %A \nPredicted: %A \nExpected %A \nerror: %A" i o e err
                         err
                     )
-
+                printfn "\n------" 
                 error |> Array.average
             )
-            |> Array.averageBy (fun x -> printfn "Fold Loss: %f" x;x)
+            |> Array.averageBy (fun x -> printfn "Average Fold Loss: %f" x;x)                               //grabing the average fold losses to see if things look right.
         )
         |>Seq.average
-        |> (fun x -> printfn "Final Loss: %f" x;x)
+        |> (fun x -> printfn "Final Algorithm Loss: %f" x;x)                                                //just a judgement of the algorithm's performace overall.
         |> ignore 
         0
 

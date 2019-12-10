@@ -26,6 +26,7 @@ module Functions =
     type Genome = Chromosome []             // Type alias Genomes represet Arrays of Chromosomes
     
     type Agent = {                          // Type for an array of individuals
+        name                                    : string
         position                                : Genome                            // Current position
         pBest                                   : Genome                            // Personal best
         velocity                                : Genome                            // Current velocity
@@ -154,7 +155,8 @@ module Functions =
         for j = 0 to height - 1 do                                                                                          // Iterate through array height                                                                           
             for i = 0 to width - 1 do                                                                                       // Iterate through array width
                 if rand.NextDouble() <= mutationRate then                                                                   // If our random value falls below the mutation rate ...
-                    chromosome.[j,i]<- chromosome.[j,i] + ((*nextFloat32() *) (randNorm mean.[j,i] stdDev.[j,i]))              // ... mutate with a random value
+                    chromosome.[j,i]<- chromosome.[j,i] + ((*nextFloat32() *) (randNorm mean.[j,i] stdDev.[j,i])-mean.[j,i])              // ... mutate with a random value
+                    //chromosome.[j,i]<- chromosome.[j,i] + randUniform_m1_1()                                                 // ... mutate with a random value
 
     // Function to mutate a genome
     let genomeMutation mutationRate (mean:float32[,][]) (stdDev:float32[,][]) genome =
@@ -353,18 +355,30 @@ module Functions =
     let runTrainingSet lossFunction (g:Agent) (trainingSet:float32[][]) (expectedResults:float32[][]) =
         trainingSet                                                                                             // Grab the training set                        
         |>Seq.zip expectedResults                                                                               // Zip with the expected results into tuples
-        |>Seq.sumBy (fun (er,ts) ->                                                                         // Average the tiple values
+        |>Seq.sumBy (fun (er,ts) ->                                                                             // Average the tiple values
             let pred = runFeedForward g.position ts                                                             // Run the feedforward neural network        
             calculateError lossFunction pred er                                                                 // Calculate the error of the results    
         )
 
     // Function to run a generation
     let runGeneration (options:RunGenerationOptions) (initialPopulation:Population) (trainingSet:float32[][]) (expectedResults:float32[][])  =
-        let rec loop cnt (lastMinErr:float32) (currentPopulation:Population) =                                      // Loop through the current population
+        let rec loop cnt (lastMinErr:float32) (currentPopulation:Population) =                                  // Loop through the current population
             let popsWithErrors =                                                                                // Grab the population members with errors
-                currentPopulation                                                                               // For the current population ...
-                |>Array.map (fun a -> a,runTrainingSet options.lossFn a trainingSet expectedResults)            // ... map out the training set
-                |>(if  options.sortByError then Array.sortBy snd else id)                                       // Sort based on error
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+                // currentPopulation                                                                               // For the current population ...
+                // |>Array.map (fun a -> a,runTrainingSet options.lossFn a trainingSet expectedResults)            // ... map out the training set
+                // |>(if  options.sortByError then Array.sortBy snd else id)                                       // Sort based on error
+                let results =
+                    currentPopulation
+                    |> Seq.map (fun a -> async { return a,runTrainingSet options.lossFn a trainingSet expectedResults })
+                    |> Async.Parallel
+                    |> Async.RunSynchronously
+                    |>(if  options.sortByError then Array.sortBy snd else id)                                       // Sort based on error
+                sw.Stop()
+                let seconds = sw.Elapsed.TotalSeconds
+                printfn "\nGen[%02d]: elapsedTime: %f time per training set: %f" cnt seconds (seconds/float trainingSet.Length)
+                results
+            printfn "best: %s err: %f" (popsWithErrors.[0]|>fst).name (popsWithErrors.[0]|>snd)
             let minErr = popsWithErrors |> Seq.map snd |> Seq.min                                               // Grab the smallest error
             let errDelta = abs(lastMinErr-minErr)                                                               // Calculate the delta value
             let avgErr = popsWithErrors |> Array.averageBy snd                                                  // Calculate the average error
@@ -377,23 +391,24 @@ module Functions =
                 if errDelta > options.converganceDeltaError then                                                    // If the error delta is greater than the convergence delta ...
                     match options.nextGenFn popsWithErrors with                                                     // Print error messages
                     | None ->
-                        printfn "[%02d] Next Gen Function Stopped.\naverage error: %f best error: %f worst error: %f" cnt avgErr bestErr worstErr
+                        printfn "Gen[%02d] Next Gen Function Stopped.\naverage error: %f best error: %f worst error: %f" cnt avgErr bestErr worstErr
                         popsWithErrors |> Seq.minBy snd |> fst
                     | Some v ->
-                        printfn "[%02d] errDelta: %f average error: %f best error: %f worst error: %f" cnt errDelta avgErr bestErr worstErr
+                        printfn "Gen[%02d] errDelta: %f average error: %f best error: %f worst error: %f" cnt errDelta avgErr bestErr worstErr
                         loop (cnt+1) minErr v
                 else
-                    printfn "[%02d] Local Optimal Reached: %f < %f\naverage error: %f best error: %f worst error: %f" cnt errDelta options.converganceDeltaError avgErr bestErr worstErr
+                    printfn "Gen[%02d] Local Optimal Reached: %f < %f\naverage error: %f best error: %f worst error: %f" cnt errDelta options.converganceDeltaError avgErr bestErr worstErr
                     popsWithErrors |> Seq.minBy snd |> fst 
         loop 0 System.Single.MaxValue initialPopulation
 
     // Function to run a Genetic Algorithm (GA) on the next generation
+    let mutable nextChild = 0
     let simpleGANextGen mutationRate (popErrs:(Agent*float32)[]) =
         let maxidx = popErrs.Length/3                                                                           // Grab the max ID index
         let mean,stdDev = popErrs |> Seq.map (fun x -> (fst x).position)|> getGenomeMeanAndStdDev               // Get the mean and standard deviation
         let p = Array.zeroCreate popErrs.Length                                                                 // Create an array to represent the current population
         let mutable p_i = 0                                                                                     // Create an array to represent the next population
-        while p_i < (maxidx*2) do                                                                                 
+        while p_i < (maxidx*2) do                                                                                             
             let a,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
             let b,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
             
@@ -402,8 +417,10 @@ module Functions =
                 pointCrossoverGenome a.position b.position
             genomeMutation mutationRate mean stdDev c_1                                                         // Mutate child 1
             genomeMutation mutationRate mean stdDev c_2                                                         // Mutate child 2
-            let ac_1 = {a with position = c_1} 
-            let ac_2 = {b with position = c_2} 
+            let ac_1 = {a with position = c_1; name =  string nextChild} 
+            nextChild <- nextChild+1
+            let ac_2 = {b with position = c_2; name =  string nextChild} 
+            nextChild <- nextChild+1
                 
 
             p.[p_i] <- ac_1                                                                                     // Update the population ...
@@ -413,7 +430,7 @@ module Functions =
                 p_i <- p_i+1                                                                                    // ... with the previous member
         let mutable ii = 0            
         while p_i < p.Length do
-            p.[p_i] <- p.[ii]
+            p.[p_i] <- let x,_ = popErrs.[ii] in x
             p_i <- p_i + 1
             ii <- ii + 1
         Some p  
@@ -439,12 +456,15 @@ module Functions =
 
     // Function to initialize a population
     let initializePopulatation (genomeDescriptor:seq<int>) size =
-        Array.init size (fun _ ->                                                                               // Initialize an array ...
-            
+        Array.init size (fun i ->                                                                               // Initialize an array ...
+            let pos = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
+            let name = string nextChild
+            nextChild <- nextChild+1
             {                          // Type for an array of individuals
-                position = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
-                pBest = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
-                velocity = initRandGenome randUniform_m1_1 genomeDescriptor                                                    // ... generate random genomes
+                name = name
+                position = pos
+                pBest = pos                                                    // ... generate random genomes
+                velocity = initRandGenome (randUniform_m1_1 >> (fun x -> x*0.25f)) genomeDescriptor                                                    // ... generate random genomes
                 neighbors = Array.zeroCreate 0
                 bestError = 0.0f
             }

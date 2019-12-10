@@ -42,6 +42,7 @@ module Functions =
             lossFn                      : float32[] -> float32[] -> float32
             nextGenFn                   : (Agent*float32)[] -> Agent[] option 
             converganceDeltaError       : float32
+            maxGens                     : int 
         }
 
 
@@ -110,7 +111,39 @@ module Functions =
         |> Seq.map (fun (a,b) -> uniformCrossover a b)                                                      // Map a and b and perform uniform crossover
         |> Seq.toArray                                                                                      // Convert to array
         |> Array.unzip                                                                                      // Unzip into two new genomes
-    
+
+    // Function to perform uniform crossover of chromosomes a and b
+    let pointCrossover (a:Chromosome) (b:Chromosome) =
+        let height, width = validateChromosomeSize a b                                                      // Take the height and width of the chromosomes
+        let pt = rand.Next(width*height)
+        let jl = pt/width;
+        let il = pt%width;
+        let r1 = Array2D.zeroCreate height width                                                            // Create empty array of same size - child r1
+        let r2 = Array2D.zeroCreate height width                                                            // Create empty array of same size - child r2
+        for j = 0 to jl-1 do
+            for i = 0 to width - 1 do
+                r1.[j,i] <- a.[j,i]
+                r2.[j,i] <- b.[j,i]
+        for i = 0 to il-1 do
+                r1.[jl,i] <- a.[jl,i]
+                r2.[jl,i] <- b.[jl,i]
+        for i = il to width-1 do                
+                r1.[jl,i] <- b.[jl,i]
+                r2.[jl,i] <- a.[jl,i]
+        for j = jl to height - 1 do                                                                          // Iterate through array height    
+            for i = 0 to width - 1 do                                                                       // Iterate through array width
+                    r1.[j,i] <- b.[j,i]
+                    r2.[j,i] <- a.[j,i]
+        r1, r2                                                                                              // Return r1 and r2
+
+    // Function to perform uniform crossover between genomes a and b
+    let pointCrossoverGenome (a:Genome) (b:Genome) =
+        a                                                                                                   // Grab genome a
+        |> Seq.zip b                                                                                        // Zip a and b into tuples
+        |> Seq.map (fun (a,b) -> pointCrossover a b)                                                      // Map a and b and perform uniform crossover
+        |> Seq.toArray                                                                                      // Convert to array
+        |> Array.unzip                                                                                      // Unzip into two new genomes
+
 
     // MUTATION FUNCTIONS
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
@@ -121,7 +154,7 @@ module Functions =
         for j = 0 to height - 1 do                                                                                          // Iterate through array height                                                                           
             for i = 0 to width - 1 do                                                                                       // Iterate through array width
                 if rand.NextDouble() <= mutationRate then                                                                   // If our random value falls below the mutation rate ...
-                    chromosome.[j,i]<- chromosome.[j,i] + (nextFloat32() * (randNorm mean.[j,i] stdDev.[j,i]))              // ... mutate with a random value
+                    chromosome.[j,i]<- chromosome.[j,i] + ((*nextFloat32() *) (randNorm mean.[j,i] stdDev.[j,i]))              // ... mutate with a random value
 
     // Function to mutate a genome
     let genomeMutation mutationRate (mean:float32[,][]) (stdDev:float32[,][]) genome =
@@ -170,28 +203,32 @@ module Functions =
 
     // LOSS FUNCTIONS
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
-
-    // Cross Entropy Loss
-    let crossEntropyLoss (predicted:float32[]) (expected:float32[]) =
+       
+    //CountingLoss
+    let countingLoss (predicted:float32[]) (expected:float32[]) =
        Seq.zip predicted expected                                                                       // Zip the arrays of predicted and expected values into tuples
        |> Seq.map (fun (predicted,expected) ->                                                          // Map through each tuple            
-           let predicted = float predicted                                                              // Represent the predicted value as a float
-           let expected = float expected                                                                // Represent the expected value as a float
-           let log = System.Math.Log2                                                                   // Use a base-2 logarithm
-           -(expected * (log predicted) + (1.- expected) * (log (1. - predicted)))                      // Calculate the loss between the predicted/expected values    
-           |> float32                                                                                   // Set as float        
+           let predicted = if predicted < 0.5f then false else true                                     // Represent the predicted value as a float
+           let expected =  if expected  = 0.f then false else true                                      // Represent the expected value as a bool
+           if predicted = expected then 0.0f else 1.0f
+           //abs(predicted-expected)
+
        ) |> Seq.sum                                                                                     // Sum each loss and return
- 
+
     // Mean Square Error Loss
     let MSELoss (predicted:float32[]) (expected:float32[])=
+        let length = min expected.Length predicted.Length
         let mutable errSum = 0.f                                                                        // Initialize mutable sum value
-        for i = 0 to predicted.Length-1 do                                                              // Iterate through predicted values
+        for i = 0 to length-1 do                                                              // Iterate through predicted values
             errSum <- let d = predicted.[i] - expected.[i] in d*d+errSum                                // Square the difference between the output and expected node and sum it
-        errSum/(float32 predicted.Length)                                                               // Divide by 2 to make the derivitave easier
+        errSum/(float32 predicted.Length)                                                               // Divide by the number of predicted elements to make the derivitave easier
 
     // Function to calculate the error based on a given loss function
     let calculateError lossFunction predicted expected : float32 =
-        lossFunction predicted expected                                                                 // Return the loss of the predicted/expected pair
+        let loss = lossFunction predicted expected                                                                 // Return the loss of the predicted/expected pair
+        if System.Single.IsNaN loss then 
+            failwithf "error is not a number!"
+        else loss
 
 
     // POPULATION ALGORITHM FUNCTIONS
@@ -280,9 +317,9 @@ module Functions =
     // Function to update the position of a member
     let updateAgentPosition (agent : Agent) =
         
-        for i = 0 to agent.position.Length do                                           // Iterate through the agent's position genome length
-            for j = 0 to agent.position.[0].GetLength(0) do                             // Iterate through the agent's position genome's chromosome length
-                for k = 0 to agent.position.[0].GetLength(1) do                         // Iterate through the agent's position genome's chromosome width
+        for i = 0 to agent.position.Length-1 do                                           // Iterate through the agent's position genome length
+            for j = 0 to agent.position.[i].GetLength(0)-1 do                             // Iterate through the agent's position genome's chromosome length
+                for k = 0 to agent.position.[i].GetLength(1)-1 do                         // Iterate through the agent's position genome's chromosome width
                     let pos = agent.position.[i].[j,k]                                  // Get the agent's position genome's chromosome
                     let vel = agent.velocity.[i].[j,k]                                  // Get the agent's velocity genome's chromosome
                     agent.position.[i].[j,k] <- pos + vel                               // Add
@@ -296,9 +333,9 @@ module Functions =
         let r1 = nextFloat32()                                                          // Generate random value r1
         let r2 = nextFloat32()                                                          // Generate random value r2
 
-        for i = 0 to agent.position.Length do                                           // Iterate through the agent's position genome length
-            for j = 0 to agent.position.[0].GetLength(0) do                             // Iterate through the agent's position genome's chromosome length
-                for k = 0 to agent.position.[0].GetLength(1) do                         // Iterate through the agent's position genome's chromosome width
+        for i = 0 to agent.position.Length - 1 do                                           // Iterate through the agent's position genome length
+            for j = 0 to agent.position.[i].GetLength(0) - 1 do                             // Iterate through the agent's position genome's chromosome length
+                for k = 0 to agent.position.[i].GetLength(1) - 1 do                         // Iterate through the agent's position genome's chromosome width
                     let vel = agent.velocity.[i].[j,k]                                  // Get the agent's velocity genome's chromosome
                     let pos = agent.position.[i].[j,k]
                     let pBest = agent.pBest.[i].[j,k]
@@ -316,14 +353,14 @@ module Functions =
     let runTrainingSet lossFunction (g:Agent) (trainingSet:float32[][]) (expectedResults:float32[][]) =
         trainingSet                                                                                             // Grab the training set                        
         |>Seq.zip expectedResults                                                                               // Zip with the expected results into tuples
-        |>Seq.averageBy (fun (er,ts) ->                                                                         // Average the tiple values
+        |>Seq.sumBy (fun (er,ts) ->                                                                         // Average the tiple values
             let pred = runFeedForward g.position ts                                                             // Run the feedforward neural network        
             calculateError lossFunction pred er                                                                 // Calculate the error of the results    
         )
 
     // Function to run a generation
     let runGeneration (options:RunGenerationOptions) (initialPopulation:Population) (trainingSet:float32[][]) (expectedResults:float32[][])  =
-        let rec loop (lastMinErr:float32) (currentPopulation:Population) =                                      // Loop through the current population
+        let rec loop cnt (lastMinErr:float32) (currentPopulation:Population) =                                      // Loop through the current population
             let popsWithErrors =                                                                                // Grab the population members with errors
                 currentPopulation                                                                               // For the current population ...
                 |>Array.map (fun a -> a,runTrainingSet options.lossFn a trainingSet expectedResults)            // ... map out the training set
@@ -332,55 +369,65 @@ module Functions =
             let errDelta = abs(lastMinErr-minErr)                                                               // Calculate the delta value
             let avgErr = popsWithErrors |> Array.averageBy snd                                                  // Calculate the average error
             let bestErr = popsWithErrors |> Seq.map snd |> Seq.min                                              // Calculate the best error
-            let worstErr = popsWithErrors |> Seq.map snd |> Seq.max                                             // Calculate the worst error
-            if errDelta > options.converganceDeltaError then                                                    // If the error delta is greater than the convergence delta ...
-                match options.nextGenFn popsWithErrors with                                                     // Print error messages
-                | None ->
-                    printfn "Next Gen Function Stopped.\naverage error: %f best error: %f worst error: %f" avgErr bestErr worstErr
-                    popsWithErrors |> Seq.minBy snd |> fst
-                | Some v ->
-                    printfn "errDelta: %f average error: %f best error: %f worst error: %f" errDelta avgErr bestErr worstErr
-                    loop minErr v
+            let worstErr = popsWithErrors |> Seq.map snd |> Seq.max                                             // Calculate the worst error            
+            if (cnt+1)>options.maxGens then
+                printfn "Max Generations Reached: %d\naverage error: %f best error: %f worst error: %f" options.maxGens avgErr bestErr worstErr
+                popsWithErrors |> Seq.minBy snd |> fst
             else
-                printfn "Local Optimal Reached: %f < %f\naverage error: %f best error: %f worst error: %f" errDelta options.converganceDeltaError avgErr bestErr worstErr
-                popsWithErrors |> Seq.minBy snd |> fst 
-        loop System.Single.MaxValue initialPopulation
+                if errDelta > options.converganceDeltaError then                                                    // If the error delta is greater than the convergence delta ...
+                    match options.nextGenFn popsWithErrors with                                                     // Print error messages
+                    | None ->
+                        printfn "[%02d] Next Gen Function Stopped.\naverage error: %f best error: %f worst error: %f" cnt avgErr bestErr worstErr
+                        popsWithErrors |> Seq.minBy snd |> fst
+                    | Some v ->
+                        printfn "[%02d] errDelta: %f average error: %f best error: %f worst error: %f" cnt errDelta avgErr bestErr worstErr
+                        loop (cnt+1) minErr v
+                else
+                    printfn "[%02d] Local Optimal Reached: %f < %f\naverage error: %f best error: %f worst error: %f" cnt errDelta options.converganceDeltaError avgErr bestErr worstErr
+                    popsWithErrors |> Seq.minBy snd |> fst 
+        loop 0 System.Single.MaxValue initialPopulation
 
     // Function to run a Genetic Algorithm (GA) on the next generation
     let simpleGANextGen mutationRate (popErrs:(Agent*float32)[]) =
-        let maxidx = popErrs.Length/2                                                                           // Grab the max ID index
+        let maxidx = popErrs.Length/3                                                                           // Grab the max ID index
         let mean,stdDev = popErrs |> Seq.map (fun x -> (fst x).position)|> getGenomeMeanAndStdDev               // Get the mean and standard deviation
         let p = Array.zeroCreate popErrs.Length                                                                 // Create an array to represent the current population
         let mutable p_i = 0                                                                                     // Create an array to represent the next population
-        while p_i < p.Length do                                                                                 
+        while p_i < (maxidx*2) do                                                                                 
             let a,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
             let b,_ = popErrs.[rand.Next(maxidx+1)]                                                             // Randomly grab members
             
             let c_1,c_2 =                                                                                       // Create two children
-                uniformCrossoverGenome a.position b.position                                                    // Perform crossover
+                //uniformCrossoverGenome a.position b.position                                                    // Perform crossover
+                pointCrossoverGenome a.position b.position
             genomeMutation mutationRate mean stdDev c_1                                                         // Mutate child 1
             genomeMutation mutationRate mean stdDev c_2                                                         // Mutate child 2
             let ac_1 = {a with position = c_1} 
             let ac_2 = {b with position = c_2} 
                 
 
-            p.[p_i] <- ac_1                                                                                      // Update the population ...
+            p.[p_i] <- ac_1                                                                                     // Update the population ...
             p_i <- p_i+1
             if p_i < p.Length then
-                p.[p_i] <- ac_2                                                                                  // ... with the child
+                p.[p_i] <- ac_2                                                                                 // ... with the child
                 p_i <- p_i+1                                                                                    // ... with the previous member
+        let mutable ii = 0            
+        while p_i < p.Length do
+            p.[p_i] <- p.[ii]
+            p_i <- p_i + 1
+            ii <- ii + 1
         Some p  
        
        
     // Function for performing PSO
     let simplePSO (popErrs:(Agent*float32)[]) = 
-        let omega = 1.0f                                                                                           // Assign omega
-        let c1 = 1.0f                                                                                              // [PSO] Assign c1
-        let c2 = 1.0f                                                                                              // [PSO] Assign c2
+        let omega = 1.0f                                                                                        // Assign omega
+        let c1 = 1.0f                                                                                           // [PSO] Assign c1
+        let c2 = 1.0f                                                                                           // [PSO] Assign c2
         let gBest = popErrs |> Seq.map fst |> Seq.head |> fun x -> x.pBest                                      // Get gBest from all possible pBests                                         // Update gBest            
         popErrs                                                                                                 // Perform PSO
         |> Seq.map (fun (a, e) ->                                                                               // Map through the population's errors
-            a.pBest = if a.bestError > e then a.position else a.pBest                                           // [PSO] Update pBest                
+            let a = {a with pBest =if a.bestError > e then a.position else a.pBest }
             updateAgentPosition a                                                                               // [PSO] Update position
             updateAgentVelocity a omega c1 c2 gBest                                                             // [PSO] Update velocity
             a                                                                                                   // Return a

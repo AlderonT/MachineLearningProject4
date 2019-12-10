@@ -159,7 +159,7 @@ module rec Assignment3 =
         )
 
     let getInputLayerFromPoint (p:Point) =
-        let inputLayer = Array.zeroCreate (p.realAttributes.Length + p.metadata.inputNodeCount)
+        let inputLayer = Array.zeroCreate (p.metadata.inputNodeCount)
         p.realAttributes 
         |> Seq.iteri (fun idx attributeValue -> 
             let nidx = p.metadata.getRealAttributeNodeIndex idx 
@@ -169,7 +169,7 @@ module rec Assignment3 =
         |> Seq.iteri (fun idx attributeValue -> 
             let nidxs = p.metadata.getCategoricalAttributeNodeIndices idx
             nidxs |> Seq.iteri (fun i nidx ->
-                inputLayer.[nidx+p.realAttributes.Length] <- if i = attributeValue then 1.f else 0.f 
+                inputLayer.[nidx] <- if i = attributeValue then 1.f else 0.f 
             )
         )
         inputLayer
@@ -395,87 +395,88 @@ module Main =
         //let dsmd5 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\segmentation.data" (Some 0) None 2. true true)
         //let dsmd6 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-red.csv" None (Some 9) 2. false true)
         //let dsmd7 = (fullDataset @"D:\Fall2019\Machine Learning\Project3\Data\winequality-white.csv" None (Some 11) 2. false true)
-        let dsmd1 = (fullDataset @"..\..\..\Data\abalone.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-        let dsmd2 = (fullDataset @"..\..\..\Data\car.data" (Some 6) None 2. true false)
-        let dsmd3 = (fullDataset @"..\..\..\Data\forestfires.csv" None (Some 12) 2. true true)
-        let dsmd4 = (fullDataset @"..\..\..\Data\machine.data" None (Some 9) 2. true false )
-        let dsmd5 = (fullDataset @"..\..\..\Data\segmentation.data" (Some 0) None 2. true true)
-        let dsmd6 = (fullDataset @"..\..\..\Data\winequality-red.csv" None (Some 9) 2. false true)
-        let dsmd7 = (fullDataset @"..\..\..\Data\winequality-white.csv" None (Some 11) 2. false true)
-        let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
-        //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
-    
-        
+        let dsmd1 = (fullDataset @"D:\Fall2019\Machine Learning\Project4\Data\xor.data" (Some 0) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
 
+        let fiao = generateFoldInputsAndOutputs (fst <| dsmd1)
+
+
+        //let dsmd2 = (fullDataset @"..\..\..\Data\car.data" (Some 6) None 2. true false)
+        //let dsmd3 = (fullDataset @"..\..\..\Data\forestfires.csv" None (Some 12) 2. true true)
+        //let dsmd4 = (fullDataset @"..\..\..\Data\machine.data" None (Some 9) 2. true false )
+        //let dsmd5 = (fullDataset @"..\..\..\Data\segmentation.data" (Some 0) None 2. true true)
+        //let dsmd6 = (fullDataset @"..\..\..\Data\winequality-red.csv" None (Some 9) 2. false true)
+        //let dsmd7 = (fullDataset @"..\..\..\Data\winequality-white.csv" None (Some 11) 2. false true)
+        //let datasets = [|dsmd1;dsmd2;dsmd3;dsmd4;dsmd5;dsmd6;dsmd7|]
+        //let ds1,metadata = (fullDataset @"D:\Fall2019\Machine Learning\MachineLearningProject3\Data\car.data" (Some 6) None 2. true false) //filename classIndex regressionIndex pValue isCommaSeperated hasHeader
+        let datasets =[|dsmd1|]
         datasets
         |>Seq.map (fun (ds,metadata)->
             let genomeSizes = seq {
                 yield metadata.inputNodeCount
-                yield 10
-                yield 10
+                yield 5
+                yield 5
+                yield 5
                 yield metadata.outputNodeCount
             }
             let options = {
                 sortByError = true
-                lossFn = if metadata.isClassification then Functions.crossEntropyLoss else Functions.MSELoss
-                nextGenFn = Functions.simpleGANextGen 0.02
-                converganceDeltaError = 0.001f
+                //lossFn = if metadata.isClassification then Functions.countingLoss else Functions.MSELoss
+                //lossFn =  Functions.MSELoss
+                lossFn = Functions.countingLoss
+                nextGenFn = Functions.simpleGANextGen 0.02 //0.02
+                converganceDeltaError = -1.000f
+                maxGens = 100
             }
             let foldInputsAndOutputs = generateFoldInputsAndOutputs ds
             foldInputsAndOutputs 
-            |> Array.mapi (fun i _ -> 
-                let validationSet = foldInputsAndOutputs.[i]
+            |> Array.mapi (fun i v -> 
+                let validationSet = v
                 let trainingSet = 
-                    let res = Array.zeroCreate (foldInputsAndOutputs.Length-1)
-                    for j = 0 to res.Length-1 do 
-                        if j=i then () 
-                        else res.[j] <- foldInputsAndOutputs.[j]
-                    res
+                    let res = ResizeArray ()
+                    for j = 0 to foldInputsAndOutputs.Length-1 do 
+                        if j<>i then res.Add foldInputsAndOutputs.[j] 
+                    res 
+                    |> Seq.fold (fun (i_s,o_s) (i,o)->
+                        seq {yield! i_s;yield!i}, 
+                        seq {yield! o_s;yield!o}
+                    ) (Seq.empty,Seq.empty)
+                    |> fun (i_s,o_s) -> (i_s |> Seq.toArray),(o_s|>Seq.toArray)
                 validationSet,trainingSet
             )
             |> Array.map (fun (validationSet,trainingSet) -> 
-                let agents = 
-                    trainingSet
-                    |> Array.map (fun (tsi,tso) -> 
-                        runGeneration options (initializePopulatation genomeSizes 100)  tsi tso)
+                let agent =
+                    let tsi,tso = trainingSet
+                    runGeneration options (initializePopulatation genomeSizes 100)  tsi tso
                 let outputs = 
                     validationSet 
                     |> fun x ->  fst x
                     |> Array.mapi (fun i vi -> 
-                        runFeedForward agents.[i].position vi    
+                        runFeedForward agent.position vi    
                     )
                 let error = 
                     let expectedvs= 
                         validationSet 
-                        |> fun x ->  fst x
+                        |> fun x ->  snd x
                     outputs
                     |> Array.zip expectedvs
-                    |> Array.map (fun (o,e) -> MSELoss o e)
+                    |> Array.mapi (fun i (e,o) -> 
+                        let err = options.lossFn o e
+                        printf "idx: %d" i
+                        Seq.zip o e
+                        |> Seq.iteri (fun c (p, e) -> printf " %d:[%f,%f] [%A,%A]" c p e (p<0.5f) (e<0.5f))
+                        printfn ""
+                        //printfn "idx: %A \nPredicted: %A \nExpected %A \nerror: %A" i o e err
+                        err
+                    )
 
                 error |> Array.average
             )
-            |> Seq.toArray
-            |> Array.iter (fun x -> printfn "MSE: %f" x)
+            |> Array.averageBy (fun x -> printfn "Fold Loss: %f" x;x)
         )
-        |> Seq.toArray
+        |>Seq.average
+        |> (fun x -> printfn "Final Loss: %f" x;x)
+        |> ignore 
         0
-        //let ds,metadata = dsmd3
-        //let network = createNetwork metadata [|10;10|]
-        //initializeNetwork network 
-        //let [|trainingSet;testSet|] = getRandomFolds 2 ds|> Array.map Seq.toArray
-        //let trainingSet=trainingSet.[0..0]
-        //trainNetworkToErr 0.01f 2.f metadata network trainingSet
-        //let MSE =
-        //    testSet
-        //    |> Seq.map ( fun p ->
-        //        runNetwork metadata network p 
-        //        |> fun (_,_,err) -> err*err
-        //    )
-        //    |>Seq.average
-        //printfn "MSE: %f" MSE
-        //0
 
-        //Networks: 10x10x10, 5x5x10, and 8x4x7
-    
     //--------------------------------------------------------------------------------------------------------------
     // END OF CODE
